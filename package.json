@@ -12,7 +12,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "axios": "^1.15.0",
+    "axios": "^1.16.0",
     "express": "^5.2.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elviejitos11-creator/panel-control-3002.git"
+  },
+  "bugs": {
+    "url": "https://github.com/elviejitos11-creator/panel-control-3002/issues"
+  },
+  "homepage": "https://github.com/elviejitos11-creator/panel-control-3002#readme"
 }
