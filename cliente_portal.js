@@ -333,14 +333,16 @@ app.use('/cliente', (req,res,next) => {
   // CQ_CLIENTE_ENSAMBLADO_V2
   app.get('/cliente', (req, res) => {
     try {
-      const datos = leerPerfiles(req.cliente.id);
-      const vista = require('./cq_cliente_vista_original');
-      res.send(vista.renderizar(
-        req.cliente, datos, req.csrfCliente
-      ));
-    } catch (e) {
-      console.error('[CQ VISTA]', e.message);
-      res.status(500).send('Error cargando perfiles');
+      if (typeof app.locals.cq2RenderOriginal !== 'function') {
+        throw new Error('Motor original no disponible');
+      }
+
+      // La sesion ya fue validada por exigirSesion.
+      // El motor original recibe el cliente autenticado.
+      return app.locals.cq2RenderOriginal(req, res);
+    } catch (error) {
+      console.error('[CQ2 PANEL ORIGINAL]', error.message);
+      return res.status(500).send('Error cargando panel del cliente');
     }
   });
 

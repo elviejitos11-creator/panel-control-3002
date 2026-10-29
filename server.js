@@ -1424,8 +1424,14 @@ app.use((req, res, next) => {
 });
 
 // FIN CQ2_RUTAS_ADMIN_PROTEGIDAS_V1
-app.get('/', (req, res) => {
-  const data = leerData();
+const cq2RenderOriginal = (req, res) => {
+  const data = req.cliente
+    ? JSON.parse(fs.readFileSync(
+        path.join(
+          require('./clientes_store').carpetaCliente(req.cliente.id),
+          'data.json'
+        ), 'utf8'))
+    : leerData();
   let html = `
   <html>
   <head>
@@ -1544,9 +1550,53 @@ app.get('/', (req, res) => {
   </html>
   `;
 
-  res.send(html);
-});
+  // CQ2_RENDER_ORIGINAL_COMPARTIDO_V2
+  if (req.cliente) {
+    const csrf = String(req.csrfCliente || '');
 
+    html = html.replace(
+      /<a[^>]*href="\/administracion"[^>]*>[\s\S]*?<\/a>/gi,
+      ''
+    );
+
+    html = html.replace(
+      /href="\/nuevo"/g,
+      'href="/cliente/formulario-original"'
+    );
+
+    html = html.replace(
+      /href="\/editar\/([^"]+)"/g,
+      'href="/cliente/editar?id=$1"'
+    );
+
+    html = html.replace(
+      /fetch\('\/accion'/g,
+      "fetch('/cliente/cq-accion'"
+    );
+
+    html = html.replace(
+      /fetch\('\/accion-global'/g,
+      "fetch('/cliente/cq-accion-global'"
+    );
+
+    html = html.replace(
+      'JSON.stringify({ id, accion })',
+      'JSON.stringify({ id, accion, _csrf: ' +
+      JSON.stringify(csrf) + ' })'
+    );
+
+    html = html.replace(
+      'JSON.stringify({ accion })',
+      'JSON.stringify({ accion, _csrf: ' +
+      JSON.stringify(csrf) + ' })'
+    );
+  }
+  res.send(html);
+};
+
+// Reutilizar el mismo motor de renderizado.
+app.locals.cq2RenderOriginal = cq2RenderOriginal;
+app.get('/', cq2RenderOriginal);
 // FORM NUEVO PERFIL
 app.get('/nuevo', (req, res) => {
   res.send(`
