@@ -1374,6 +1374,7 @@ app.get('/', (req, res) => {
       <button class="danger" onclick="accionGlobal('pausar_todas')">⏸ Pausar todas</button>
       <button class="success" onclick="accionGlobal('reanudar_todas')">▶️ Reanudar todas</button>
       <a class="btn warning" href="/nuevo">➕ Nuevo perfil</a>
+       <a class="btn" href="/administracion" style="background:#7c3aed;color:white;">⚙️ Administración de clientes</a>
     </div>
     <div class="grid">
   `;
