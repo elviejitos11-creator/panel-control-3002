@@ -1,4 +1,4 @@
-﻿{
+{
     "deploy":  {
                    "restartPolicyMaxRetries":  5,
                    "startCommand":  "npm start",
