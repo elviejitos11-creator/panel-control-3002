@@ -1,0 +1,7 @@
+﻿{
+    "deploy":  {
+                   "restartPolicyMaxRetries":  5,
+                   "startCommand":  "npm start",
+                   "restartPolicyType":  "ON_FAILURE"
+               }
+}

@@ -1,3 +1,5 @@
+// CQ2_API_SEGURA_V1
+// CQ2_MOTOR_SEGURO_V2
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -15,16 +17,54 @@ const app = express();
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+// CQ2_INTEGRACION_CLIENTES_V1
+
+// Apariencia del portal de clientes.
+require('./cq_jean_cliente_v7')(app);
+
+// Credenciales, sesiones y perfiles privados.
+require('./cliente_portal')(app);
+
+// API de clientes, usando el Telegram de CONTROL 2.
+require('./cliente_api')(app, {
+  enviarTexto,
+  enviarConBotonesCliente: (texto, chatId, cliente, id) =>
+    apiTelegram('sendMessage', {
+      chat_id: chatId,
+      text: texto,
+      reply_markup: require('./cliente_botones')
+        .botones(cliente, id)
+    })
+});
+
+// Primero el acceso; despues la administracion.
+require('./seguridad_admin')(app);
+require('./admin_api')(app);
+
+// Pantalla de administracion protegida por la sesion.
+app.get('/administracion', (req, res) => {
+  if (req.admin !== true) {
+    return res.sendStatus(403);
+  }
+
+  return res.sendFile(
+    path.join(__dirname, 'admin_clientes.html')
+  );
+});
+
+// FIN CQ2_INTEGRACION_CLIENTES_V1
+
+// CQ2_CORS_SEGURO_V1
+// No habilitar acceso universal desde otros sitios.
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, X-Cliente-Token");
+  res.setHeader('Vary', 'Origin');
   next();
 });
 
-const PORT = 3002;
+const PORT = Number(process.env.PORT || 3002);
 
 // CAMBIA ESTAS 4 COSAS
-const BOT_TOKEN = '8670917706:AAG60kOoiJlL33HFfR7oj20ISkxZ27-Crb4';
+const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const CHAT_ID = '';
 const SUPPORT_URL = 'https://t.me/tu_soporte';
 const RULES_TEXT = `📜 Reglas del sistema
@@ -35,10 +75,16 @@ const RULES_TEXT = `📜 Reglas del sistema
 4. Si necesitas ayuda, usa el botón Contactar.`;
 
 // archivos locales
-const DATA_FILE = path.join(__dirname, 'data.json');
-const STATE_FILE = path.join(__dirname, 'bot_state.json');
-const DATA_BACKUP_FILE = path.join(__dirname, 'data.backup.json');
-const STATE_BACKUP_FILE = path.join(__dirname, 'bot_state.backup.json');
+const CQ2_DATA_DIR = process.env.DATA_DIR ||
+  process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+  __dirname;
+
+fs.mkdirSync(CQ2_DATA_DIR, { recursive: true });
+
+const DATA_FILE = path.join(CQ2_DATA_DIR, 'data.json');
+const STATE_FILE = path.join(CQ2_DATA_DIR, 'bot_state.json');
+const DATA_BACKUP_FILE = path.join(CQ2_DATA_DIR, 'data.backup.json');
+const STATE_BACKUP_FILE = path.join(CQ2_DATA_DIR, 'bot_state.backup.json');
 
 // =========================
 // BLOQUEOS DE CICLO
@@ -345,7 +391,7 @@ function tokenDesdeRequest(req) {
 function tokenValidoParaPerfil(req, perfil) {
   const token = tokenDesdeRequest(req);
 
-  if (!perfil.cliente_token) return true;
+  if (!perfil.cliente_token) return false;
 
   return token === String(perfil.cliente_token).trim();
 }
@@ -912,7 +958,13 @@ app.post('/registrar-evento', async (req, res) => {
   const tipoNormal = String(tipo || 'silencioso').trim().toLowerCase();
 
   const data = leerData();
-  asegurarPerfil(data, id);
+
+  if (!Object.prototype.hasOwnProperty.call(data, id)) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Perfil no registrado'
+    });
+  }
 
   const perfil = data[id];
 
@@ -1191,6 +1243,16 @@ async function revisarTelegram() {
 
 async function ejecutarProgramaciones() {
   const state = leerState();
+
+  if (!state || typeof state !== 'object') {
+    console.error('[CQ2] Estado de programaciones invalido');
+    return;
+  }
+
+  if (!Array.isArray(state.schedules)) {
+    console.error('[CQ2] Programaciones invalidas. No se modificaron los datos.');
+    return;
+  }
   const pendientes = [];
   let cambio = false;
 
@@ -1216,6 +1278,65 @@ async function ejecutarProgramaciones() {
 // =========================
 // PANEL WEB
 // =========================
+
+// CQ2_RUTAS_ADMIN_PROTEGIDAS_V1
+
+// El panel original pertenece exclusivamente al administrador.
+// Las rutas publicas del script y el portal del cliente
+// mantienen sus propios controles de acceso.
+
+const cq2RutasPrivadas = new Set([
+  '/',
+  '/nuevo',
+  '/guardar-perfil',
+  '/accion',
+  '/accion-global'
+]);
+
+function cq2EsRutaPrivada(req) {
+  const ruta = req.path;
+
+  return cq2RutasPrivadas.has(ruta) ||
+    /^\/editar\/[^/]+\/?$/.test(ruta);
+}
+
+app.use((req, res, next) => {
+  if (!cq2EsRutaPrivada(req)) {
+    return next();
+  }
+
+  // No aceptar una cuenta de cliente como administrador.
+  if (req.admin !== true) {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      return res.redirect('/login');
+    }
+
+    return res.status(403).json({
+      ok: false,
+      error: 'Acceso exclusivo del administrador'
+    });
+  }
+
+  // Los cambios deben proceder del propio sitio.
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const origen = req.get('origin');
+
+    const esperado =
+      (req.get('x-forwarded-proto') || req.protocol) +
+      '://' + req.get('host');
+
+    if (origen && origen !== esperado) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Origen no permitido'
+      });
+    }
+  }
+
+  next();
+});
+
+// FIN CQ2_RUTAS_ADMIN_PROTEGIDAS_V1
 app.get('/', (req, res) => {
   const data = leerData();
   let html = `

@@ -1,0 +1,11 @@
+node_modules/
+clientes_data/
+.env
+.env.*
+!.env.example
+admin_auth.json
+data.json
+data.backup.json
+bot_state*.json
+*.log
+CQ2_*.txt
