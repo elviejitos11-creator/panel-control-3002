@@ -151,7 +151,7 @@ module.exports = function(app) {
       maxAge:8*3600000
     });
 
-    return res.redirect('/admin/panel/' + encodeURIComponent(c.id));
+    return res.redirect('/cliente');
   }
   // El mismo formulario admite usuarios de clientes.
   // Si no es cliente, conserva el login original del administrador.
@@ -400,12 +400,51 @@ app.use('/cliente', (req,res,next) => {
       <div class="card">
       <h2>➕ Nuevo perfil</h2>
       <form method="POST" action="/cliente/crear">
-      ${campoCsrf(req)}
-      <label>Número o ID del perfil
-      <input name="id" maxlength="40" required></label>
-      <label>Chat ID de Telegram<input name="chat_id" required pattern="-?[0-9]{5,20}"></label><label>Nombre del perfil
-      <input name="nombre" maxlength="100" required></label>
-      <button class="success">Crear perfil</button>
+        ${campoCsrf(req)}
+        <label>ID del perfil</label>
+        <input name="id" required />
+
+        <label>Nombre</label>
+        <input name="nombre" />
+
+        <label>Chat ID</label>
+        <input name="chat_id" />
+
+        <label>Cliente token / Clave de acceso</label>
+        <input name="cliente_token" />
+
+        <label>Teléfono</label>
+        <input name="telefono" />
+
+        <label>Código</label>
+        <input name="codigo" />
+
+        <label>Ubicación</label>
+        <input name="ubicacion" />
+
+        <label>Texto</label>
+        <textarea name="texto"></textarea>
+
+        <label>Estado</label>
+        <select name="estado">
+          <option value="ACTIVA">ACTIVA</option>
+          <option value="PAUSADA">PAUSADA</option>
+        </select>
+
+        <label>Foto modelo (URL o file_id)</label>
+        <input name="foto_modelo" />
+
+        <label>Foto página (URL o file_id)</label>
+        <input name="foto_pagina" />
+
+        <label>Próximo post</label>
+        <input name="proximo_post" value="16m" />
+
+        <label>Fin de plan</label>
+        <input name="fin_plan" value="7 días" />
+
+        <button class="success" type="submit">Guardar perfil</button>
+        <a class="muted" href="/cliente">Volver</a>
       </form></div>`;
 
     for(const id of ids) {
@@ -454,7 +493,46 @@ app.use('/cliente', (req,res,next) => {
       return res.status(403).send('Limite de perfiles alcanzado');
     }
 
-    const chat_id=String(req.body.chat_id||'').trim(); if(!/^-?[0-9]{5,20}$/.test(chat_id)) return res.status(400).send('Chat ID invalido'); datos[id]={nombre,chat_id,estado:'PAUSADA',cliente_token:crypto.randomBytes(32).toString('hex')};
+        // CQ2_FORM_ORIGINAL_RESTAURADO_V1
+    const campos = [
+      'chat_id','cliente_token','telefono','codigo','ubicacion',
+      'texto','estado','foto_modelo','foto_pagina',
+      'proximo_post','fin_plan'
+    ];
+    const nuevo = {nombre};
+
+    for (const campo of campos) {
+      const valor = req.body[campo];
+      if (valor !== undefined && typeof valor !== 'string') {
+        return res.status(400).send('Dato invalido: ' + campo);
+      }
+      const maximo = campo === 'texto' ? 5000 : 500;
+      if (String(valor || '').length > maximo) {
+        return res.status(400).send('Campo demasiado largo: ' + campo);
+      }
+      nuevo[campo] = String(valor || '').trim();
+    }
+
+    if (nuevo.chat_id &&
+        !/^-?[0-9]{5,20}$/.test(nuevo.chat_id)) {
+      return res.status(400).send('Chat ID invalido');
+    }
+
+    if (!['ACTIVA','PAUSADA'].includes(nuevo.estado)) {
+      return res.status(400).send('Estado invalido');
+    }
+
+    if (!nuevo.cliente_token) {
+      nuevo.cliente_token = crypto.randomBytes(32).toString('hex');
+    }
+
+    nuevo.ultima_accion = 'Perfil creado';
+    nuevo.ultima_hora = new Date().toISOString();
+    nuevo.historial_fotos = [];
+    nuevo.bump_hoy = 0;
+    nuevo.bump_total = 0;
+
+    datos[id] = nuevo;
     guardarPerfiles(c.id,datos);
     void cqNotificarClienteTelegram(
       datos[id],
