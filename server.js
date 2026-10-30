@@ -198,7 +198,24 @@ app.get('/admin/panel/:id', (req, res) => {
 
               }
 
-      return enviarOriginal(html);
+              // CQ2_CREACION_AISLADA_ADMIN_V1
+        if (typeof html === 'string') {
+          const clienteId = encodeURIComponent(cliente.id);
+
+          // Crear perfiles exclusivamente en el cliente abierto.
+          html = html.replace(
+            /href="\/nuevo"/g,
+            'href="/admin/cliente/' + clienteId + '/nuevo"'
+          );
+
+          // No ofrecer acciones globales sobre datos principales.
+          html = html.replace(
+            /<button\b[^>]*onclick="accionGlobal\([^"]*"[^>]*>[\s\S]*?<\/button>/gi,
+            ''
+          );
+        }
+
+        return enviarOriginal(html);
     };
 
     return app.locals.cq2RenderOriginal(req, res);
