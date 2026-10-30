@@ -312,7 +312,7 @@ module.exports = function(app) {
         }
       }
 
-      const layer = app._router.stack.find(l =>
+      const layer = app.router.stack.find(l =>
         l.route &&
         l.route.path === original &&
         l.route.methods[metodo]
