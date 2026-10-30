@@ -81,7 +81,7 @@ module.exports = function(app) {
 
       const fs = require('fs');
       const path = require('path');
-      const raiz = path.join(__dirname, 'clientes_data');
+      const raiz = path.dirname(store.carpetaCliente(id));
       const archivo = path.join(raiz, 'clientes.json');
       const lista = JSON.parse(fs.readFileSync(archivo, 'utf8'));
 
@@ -99,7 +99,7 @@ module.exports = function(app) {
       const carpeta = path.join(raiz, id);
       const fecha = new Date().toISOString().replace(/[:.]/g, '-');
       const destino = path.join(
-        __dirname, 'RESPALDOS_CLIENTES_ELIMINADOS', fecha + '_' + id
+        raiz, '_eliminados', fecha + '_' + id
       );
 
       fs.mkdirSync(destino, {recursive:true});
