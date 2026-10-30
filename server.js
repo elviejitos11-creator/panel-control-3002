@@ -1,4 +1,4 @@
-// CQ2_PANEL_UNICO_CORREGIDO_V1
+// CQ2_TRES_MEJORAS_FINALES_V1\n// CQ2_PANEL_UNICO_CORREGIDO_V1
 // CQ2_API_SEGURA_V1
 // CQ2_MOTOR_SEGURO_V2
 const express = require('express');
@@ -1807,7 +1807,7 @@ const cq2RenderOriginal = (req, res) => {
     </style>
   </head>
   <body>
-    <h1>🐺 PANEL PRO 🐺</h1>
+    <h1 class="cq2-lobos-titulo"><span style="font-size:1.65em;vertical-align:middle">🐺</span> PANEL PRO <span style="font-size:1.65em;vertical-align:middle">🐺</span></h1>
     <div style="margin-bottom:16px;">
       <button class="danger" onclick="accionGlobal('pausar_todas')">⏸ Pausar todas</button>
       <button class="success" onclick="accionGlobal('reanudar_todas')">▶️ Reanudar todas</button>
@@ -1917,7 +1917,7 @@ const cq2RenderOriginal = (req, res) => {
 
       html = html.replace(
         /fetch\('\/accion'/g,
-        "fetch('/cliente/accion'"
+        "fetch(accion === 'borrarperfil' ? '/cliente/cq-borrar-seguro' : '/cliente/accion'"
       );
 
       html = html.replace(

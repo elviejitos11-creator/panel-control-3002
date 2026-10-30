@@ -238,6 +238,40 @@ module.exports = function(app) {
 
   app.use('/cliente',exigirSesion);
 
+
+  // CQ2_BORRADO_CLIENTE_FINAL_V1
+  app.post('/cliente/cq-borrar-seguro',(req,res)=>{
+    try {
+      const id = String(req.body.id || '');
+      const c = req.cliente;
+
+      if (!c || !/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
+          req.body.accion !== 'borrarperfil') {
+        return res.sendStatus(400);
+      }
+
+      const archivo = archivoCliente(c.id);
+      const datos = leerPerfiles(c.id);
+
+      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
+        return res.sendStatus(404);
+      }
+
+      // Respaldo del cliente ANTES del borrado.
+      const respaldo = archivo + '.before-delete-' +
+        Date.now() + '.bak';
+
+      fs.copyFileSync(archivo,respaldo);
+      delete datos[id];
+      guardarPerfiles(c.id,datos);
+
+      return res.json({ok:true,borrado:id});
+    } catch(error) {
+      console.error('[CQ2 BORRADO CLIENTE]',error.message);
+      return res.sendStatus(500);
+    }
+  });
+
   // CQ2_UN_PANEL_RUTAS_ORIGINALES_V1
   app.use('/cliente', (req,res,next) => {
     const ruta = req.path;
