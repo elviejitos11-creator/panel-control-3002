@@ -53,92 +53,33 @@ app.get('/administracion', (req, res) => {
 });
 
 
-// CQ2_PANEL_ADMIN_CLIENTE_V2
-// Vista administrativa de perfiles, sin suplantar la sesion del cliente.
+// CQ2_PANEL_ADMIN_CLIENTE_ORIGINAL_V3
 app.get('/admin/panel/:id', (req, res) => {
-  if (req.admin !== true) {
-    return res.status(403).send('Acceso restringido');
-  }
-
-  const store = require('./clientes_store');
-
-  const esc = valor => String(valor ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  if (req.admin !== true) return res.sendStatus(403);
 
   try {
+    const store = require('./clientes_store');
     const cliente = store.listar().find(
       c => c.id === req.params.id
     );
 
-    if (!cliente) {
-      return res.status(404).send('Cliente no encontrado');
-    }
+    if (!cliente) return res.sendStatus(404);
 
-    const archivo = path.join(
-      store.carpetaCliente(cliente.id), 'data.json'
-    );
-
-    let perfiles = {};
-    if (fs.existsSync(archivo)) {
-      perfiles = JSON.parse(fs.readFileSync(archivo, 'utf8'));
-    }
-
-    if (!perfiles || Array.isArray(perfiles) ||
-        typeof perfiles !== 'object') {
-      throw new Error('Archivo de perfiles invalido');
-    }
-
-    const tarjetas = Object.entries(perfiles).map(([id, p]) => {
-      p = p || {};
-      return '<article class="perfil">' +
-        '<h3>' + esc(p.nombre || 'Perfil ' + id) + '</h3>' +
-        '<p>ID: ' + esc(id) + '</p>' +
-        '<p>Estado: ' + esc(p.estado || 'N/A') + '</p>' +
-        '<p>Ultima accion: ' + esc(p.ultima_accion || 'N/A') + '</p>' +
-        '</article>';
-    }).join('');
+    // Usar exclusivamente los datos de este cliente.
+    req.cliente = cliente;
+    req.cq2AdminVista = true;
 
     res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(`<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Administracion - Panel de cliente</title>
-<style>
-body{background:#0b172b;color:#fff;font-family:Arial,sans-serif;
-margin:0;padding:20px}
-main{max-width:900px;margin:auto}
-a{display:inline-block;background:#7533d1;color:#fff;
-padding:12px 16px;border-radius:9px;text-decoration:none}
-.perfil{background:#1a304d;padding:18px;
-border-radius:12px;margin:12px 0}
-small{color:#b8c8e5}
-</style>
-</head>
-<body>
-<main>
-<a href="/administracion">Volver a administracion</a>
-<h1>Panel de ${esc(cliente.nombre)}</h1>
-<p>Usuario: ${esc(cliente.usuario)}</p>
-<p>Estado: ${cliente.activo ? 'ACTIVO' : 'SUSPENDIDO'}</p>
-<p>Perfiles registrados: ${Object.keys(perfiles).length}</p>
-<small>Vista administrativa. Las acciones del cliente
-se ejecutan desde su propia sesion privada.</small>
-${tarjetas || '<p>Este cliente aun no tiene perfiles.</p>'}
-</main>
-</body>
-</html>`);
+
+    return app.locals.cq2RenderOriginal(req, res);
   } catch (error) {
-    console.error('[CQ2_ADMIN_PANEL]', error.message);
-    res.status(500).send('No se pudo cargar el panel del cliente');
+    console.error('[CQ2 ADMIN PANEL]', error.message);
+    return res.status(500).send(
+      'Error cargando panel del cliente'
+    );
   }
 });
-// FIN CQ2_PANEL_ADMIN_CLIENTE_V2
+// FIN CQ2_PANEL_ADMIN_CLIENTE_ORIGINAL_V3
 // FIN CQ2_INTEGRACION_CLIENTES_V1
 
 // CQ2_CORS_SEGURO_V1
@@ -1553,6 +1494,17 @@ const cq2RenderOriginal = (req, res) => {
   // CQ2_RENDER_ORIGINAL_COMPARTIDO_V2
   if (req.cliente) {
     const csrf = String(req.csrfCliente || '');
+    // CQ2_ADMIN_VISTA_SEGURA_V3
+    // La vista administrativa no puede ejecutar acciones
+    // mediante rutas que pertenezcan a otra sesion.
+    if (req.cq2AdminVista === true) {
+      html = html.replace(
+        /<button\b[^>]*>[\s\S]*?<\/button>/gi, ''
+      );
+      html = html.replace(
+        /<a\b[^>]*href="\/(?:nuevo|editar\/[^"]*)"[^>]*>[\s\S]*?<\/a>/gi, ''
+      );
+    }
 
     html = html.replace(
       /<a[^>]*href="\/administracion"[^>]*>[\s\S]*?<\/a>/gi,
