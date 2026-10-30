@@ -1,4 +1,4 @@
-// CQ2_PANEL_UNICO_CORREGIDO_V1
+﻿// CQ2_PANEL_UNICO_CORREGIDO_V1
 // CQ2_API_SEGURA_V1
 // CQ2_MOTOR_SEGURO_V2
 const express = require('express');
