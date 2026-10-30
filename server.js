@@ -68,6 +68,63 @@ require('./cliente_api')(app, {
 });
 
 // Primero el acceso; despues la administracion.
+// CQ2_BLOQUEO_CRUCE_CLIENTES_V1
+// Una sesion de cliente nunca debe escribir en el panel principal.
+// Las rutas /cliente conservan su almacenamiento privado.
+app.use((req, res, next) => {
+  const obtenerCliente = app.locals.cqClienteActual;
+
+  let cliente = null;
+  try {
+    cliente = typeof obtenerCliente === 'function'
+      ? obtenerCliente(req)
+      : null;
+  } catch (error) {
+    console.error('[CQ2 AISLAMIENTO]', error.message);
+    return res.sendStatus(500);
+  }
+
+  if (!cliente) return next();
+
+  const ruta = req.path;
+
+  const principal =
+    ruta === '/' ||
+    ruta === '/nuevo' ||
+    ruta === '/guardar-perfil' ||
+    ruta === '/accion' ||
+    ruta === '/accion-global' ||
+    /^\/editar\/[^/]+\/?$/.test(ruta);
+
+  const administracion =
+    ruta === '/administracion' ||
+    ruta.startsWith('/admin/');
+
+  if (administracion) {
+    return res.status(403).send(
+      'Cierra la sesion del cliente para administrar cuentas.'
+    );
+  }
+
+  if (!principal) return next();
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    if (ruta === '/nuevo') {
+      return res.redirect('/cliente/nuevo');
+    }
+
+    if (ruta.startsWith('/editar/')) {
+      return res.redirect('/cliente' + ruta);
+    }
+
+    return res.redirect('/cliente');
+  }
+
+  return res.status(403).json({
+    ok: false,
+    error: 'La cuenta de cliente no puede modificar datos principales'
+  });
+});
 require('./seguridad_admin')(app);
 require('./admin_api')(app);
 
