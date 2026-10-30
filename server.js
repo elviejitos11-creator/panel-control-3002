@@ -125,6 +125,38 @@ app.use((req, res, next) => {
     error: 'La cuenta de cliente no puede modificar datos principales'
   });
 });
+// CQ2_SESIONES_EXCLUSIVAS_V1
+// No permitir operar el panel principal con una sesion cliente.
+app.use((req,res,next) => {
+  const obtener = app.locals.cqClienteActual;
+  const cliente = typeof obtener === 'function'
+    ? obtener(req) : null;
+
+  if (!cliente) return next();
+
+  const ruta = req.path;
+
+  const principal = [
+    '/', '/nuevo', '/guardar-perfil',
+    '/accion', '/accion-global'
+  ].includes(ruta) || /^\/editar\/[^/]+\/?$/.test(ruta);
+
+  if (ruta === '/administracion' ||
+      ruta.startsWith('/admin/')) {
+    return res.sendStatus(403);
+  }
+
+  if (!principal) return next();
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    return res.redirect('/cliente');
+  }
+
+  return res.status(403).json({
+    ok:false,
+    error:'Operacion bloqueada: cuenta de cliente'
+  });
+});
 require('./seguridad_admin')(app);
 require('./admin_api')(app);
 

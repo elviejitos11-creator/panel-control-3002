@@ -105,6 +105,7 @@ module.exports = function activarSeguridad(app) {
     const token = crypto.randomBytes(32).toString('hex');
     sesiones.set(token, Date.now() + DURACION);
 
+    res.clearCookie('cq_cliente',{path:'/'});
     res.cookie('cq_admin', token, {
       httpOnly: true,
       sameSite: 'strict',

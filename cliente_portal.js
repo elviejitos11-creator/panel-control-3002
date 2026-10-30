@@ -143,6 +143,7 @@ module.exports = function(app) {
       hasta:Date.now()+8*3600000
     });
 
+    res.clearCookie('cq_admin',{path:'/'});
     res.cookie('cq_cliente',token,{
       httpOnly:true,
       sameSite:'strict',
