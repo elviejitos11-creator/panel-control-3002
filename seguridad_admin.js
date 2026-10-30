@@ -57,7 +57,12 @@ border:0;border-radius:11px;font-size:16px;font-weight:bold}
 </head>
 <body>
 <div class="panel">
-<h1>🔥 PANEL PRO 🔥</h1>
+<div style="text-align:center;margin-bottom:18px">
+    <img src="/img/inicio-postbot.jpg"
+      alt="POSTBOT TELEGRAM"
+      style="width:155px;max-width:75%;height:auto;border-radius:22px">
+  </div>
+  <h1>🐺 PANEL PRO 🐺</h1>
 <p>ACCESO PRIVADO</p>
 <form method="POST" action="/login">
 <label>Usuario</label>

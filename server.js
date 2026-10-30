@@ -49,58 +49,8 @@ app.locals.cq2PerfilesCliente = cliente => {
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// CQ2_DISENO_Y_BORRADO_V1
+// CQ2_LOGO_ORIGINAL_V3
 app.use('/img', express.static(path.join(__dirname,'public','img')));
-
-app.use((req,res,next) => {
-  const enviar = res.send.bind(res);
-
-  res.send = function(contenido) {
-    if (typeof contenido === 'string' &&
-        /<html\b/i.test(contenido)) {
-
-      contenido = contenido.replace(
-        /🔥\s*PANEL PRO\s*🔥/g,
-        '🐺 PANEL PRO 🐺'
-      );
-
-      const estilo = '<style id="cq2-tema-lobos">' +
-        'body{background:linear-gradient(' +
-        'rgba(3,12,28,.82),rgba(3,12,28,.90)),' +
-        'url("/img/fondo-panel.jpg") center center/' +
-        'cover fixed no-repeat!important;}' +
-        '.card{background:rgba(19,47,76,.96)!important;}' +
-        '</style>' +
-        '<link rel="icon" href="/img/inicio-postbot.jpg">' +
-        '<link rel="apple-touch-icon" ' +
-        'href="/img/inicio-postbot.jpg">';
-
-      if (!contenido.includes('cq2-tema-lobos')) {
-        contenido = contenido.replace(
-          /<\/head>/i, estilo + '</head>'
-        );
-      }
-
-      if ((req.path === '/login' ||
-           req.path === '/cliente/login') &&
-          !contenido.includes('cq2-postbot-inicio')) {
-
-        contenido = contenido.replace(
-          /<body([^>]*)>/i,
-          '<body$1><div id="cq2-postbot-inicio" ' +
-          'style="text-align:center;padding:16px">' +
-          '<img src="/img/inicio-postbot.jpg" ' +
-          'style="width:240px;max-width:75vw;' +
-          'border-radius:25px" alt="POSTBOT TELEGRAM">' +
-          '</div>'
-        );
-      }
-    }
-    return enviar(contenido);
-  };
-  next();
-});
-
 
 // CQ2_INTEGRACION_CLIENTES_V1
 
@@ -1851,7 +1801,7 @@ const cq2RenderOriginal = (req, res) => {
     </style>
   </head>
   <body>
-    <h1>🔥 PANEL PRO 🔥</h1>
+    <h1>🐺 PANEL PRO 🐺</h1>
     <div style="margin-bottom:16px;">
       <button class="danger" onclick="accionGlobal('pausar_todas')">⏸ Pausar todas</button>
       <button class="success" onclick="accionGlobal('reanudar_todas')">▶️ Reanudar todas</button>
