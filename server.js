@@ -1,4 +1,4 @@
-﻿// CQ2_PANEL_UNICO_CORREGIDO_V1
+// CQ2_PANEL_UNICO_CORREGIDO_V1
 // CQ2_API_SEGURA_V1
 // CQ2_MOTOR_SEGURO_V2
 const express = require('express');
@@ -161,6 +161,12 @@ app.use((req,res,next) => {
     ok:false,
     error:'Operacion bloqueada: cuenta de cliente'
   });
+});
+ // CQ2_MANIFEST_POSTBOT_V1
+app.get('/manifest.webmanifest',(req,res)=>{
+  res.type('application/manifest+json').sendFile(
+    path.join(__dirname,'public','manifest.webmanifest')
+  );
 });
 require('./seguridad_admin')(app);
 require('./admin_api')(app);

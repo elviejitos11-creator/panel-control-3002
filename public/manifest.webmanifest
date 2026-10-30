@@ -1,0 +1,20 @@
+{
+    "theme_color":  "#071b35",
+    "name":  "PANEL PRO",
+    "display":  "standalone",
+    "short_name":  "PANEL PRO",
+    "background_color":  "#071b35",
+    "start_url":  "/login",
+    "icons":  [
+                  {
+                      "type":  "image/png",
+                      "sizes":  "192x192",
+                      "src":  "/img/postbot-192.png"
+                  },
+                  {
+                      "type":  "image/png",
+                      "sizes":  "512x512",
+                      "src":  "/img/postbot-icono.png"
+                  }
+              ]
+}
