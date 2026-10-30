@@ -244,6 +244,67 @@ app.post(
   }
 );
 // FIN CQ2_CREACION_ADMIN_CLIENTE_V1
+
+// CQ2_ACCIONES_ADMIN_SEGURAS_V1
+app.post('/admin/cliente/:id/accion', (req,res) => {
+  if (req.admin !== true) return res.sendStatus(403);
+
+  const origen = req.get('origin');
+  const esperado = (req.get('x-forwarded-proto') || req.protocol) +
+    '://' + req.get('host');
+
+  if (origen && origen !== esperado) return res.sendStatus(403);
+
+  const store = require('./clientes_store');
+  const cliente = store.listar().find(c => c.id === req.params.id);
+  if (!cliente) return res.sendStatus(404);
+
+  const id = String(req.body.id || '');
+  const accion = String(req.body.accion || '');
+
+  if (!/^[a-zA-Z0-9_-]{1,40}$/.test(id)) {
+    return res.sendStatus(400);
+  }
+
+  if (!['pausar','reanudar','reiniciar'].includes(accion)) {
+    return res.status(400).json({
+      ok:false,
+      error:'Accion no habilitada'
+    });
+  }
+
+  try {
+    const archivo = path.join(
+      store.carpetaCliente(cliente.id), 'data.json'
+    );
+
+    const datos = JSON.parse(fs.readFileSync(archivo,'utf8'));
+    if (!datos || typeof datos !== 'object' ||
+        Array.isArray(datos) ||
+        !Object.prototype.hasOwnProperty.call(datos,id)) {
+      return res.sendStatus(404);
+    }
+
+    datos[id].estado = accion === 'pausar' ? 'PAUSADA' : 'ACTIVA';
+    datos[id].ultima_hora = new Date().toISOString();
+    datos[id].ultima_accion =
+      accion === 'pausar' ? 'Pausado desde administracion' :
+      accion === 'reanudar' ? 'Reanudado desde administracion' :
+      'Reiniciado desde administracion';
+
+    const temporal = archivo + '.tmp';
+    fs.writeFileSync(
+      temporal,JSON.stringify(datos,null,2),'utf8'
+    );
+    fs.renameSync(temporal,archivo);
+
+    return res.json({ok:true,estado:datos[id].estado});
+  } catch(e) {
+    console.error('[CQ2 ADMIN ACCION]',e.message);
+    return res.sendStatus(500);
+  }
+});
+// FIN CQ2_ACCIONES_ADMIN_SEGURAS_V1
 // FIN CQ2_INTEGRACION_CLIENTES_V1
 
 // CQ2_CORS_SEGURO_V1
@@ -1658,18 +1719,32 @@ const cq2RenderOriginal = (req, res) => {
   // CQ2_RENDER_ORIGINAL_COMPARTIDO_V2
   if (req.cliente) {
     const csrf = String(req.csrfCliente || '');
-    // CQ2_ADMIN_VISTA_SEGURA_V3
-    // La vista administrativa no puede ejecutar acciones
-    // mediante rutas que pertenezcan a otra sesion.
+    // CQ2_ACCIONES_ADMIN_SEGURAS_V1
     if (req.cq2AdminVista === true) {
+      const cid = encodeURIComponent(req.cliente.id);
+
+      // Mantener los botones que tienen operacion privada validada.
       html = html.replace(
-        /<button\b[^>]*>[\s\S]*?<\/button>/gi, ''
+        /fetch\('\/accion',/g,
+        "fetch('/admin/cliente/" + cid + "/accion',"
+      );
+
+      // No permitir que acciones globales usen el motor del administrador.
+      html = html.replace(
+        /<button\b[^>]*onclick="accionGlobal\([^"]*"[^>]*>[\s\S]*?<\/button>/gi,
+        ''
+      );
+
+      // Edicion y operaciones aun no conectadas se bloquean.
+      html = html.replace(
+        /<a\b[^>]*href="\/editar\/[^"]*"[^>]*>[\s\S]*?<\/a>/gi,
+        ''
       );
       html = html.replace(
-        /<a\b[^>]*href="\/(?:nuevo|editar\/[^"]*)"[^>]*>[\s\S]*?<\/a>/gi, ''
+        /<button\b[^>]*onclick="accionPerfil\('[^']+','(?:resetacceso|progpausa|progreanudar|ultima|foto|borrarperfil)'\)"[^>]*>[\s\S]*?<\/button>/gi,
+        ''
       );
     }
-
     html = html.replace(
       /<a[^>]*href="\/administracion"[^>]*>[\s\S]*?<\/a>/gi,
       ''
