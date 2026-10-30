@@ -15,6 +15,8 @@ try {
 }
 
 const app = express();
+// CQ2_ID_GLOBAL_FINAL_V2
+const cq2IdExiste = require('./cq2_id_unico');
 
 // CQ2_UN_PANEL_DATOS_PRIVADOS_V1
 const { AsyncLocalStorage } = require('async_hooks');
@@ -295,7 +297,7 @@ app.post(
         return res.status(400).send('ID invalido');
       }
 
-      if (Object.prototype.hasOwnProperty.call(datos, id)) {
+      if (cq2IdExiste(id)) {
         return res.status(409).send('El perfil ya existe');
       }
 
@@ -1884,7 +1886,7 @@ const cq2RenderOriginal = (req, res) => {
 
       html = html.replace(
         /<\/body>/i,
-        '<div style="margin:20px 0"><a href="/cliente/salir" ' +
+        '<div style="position:fixed;right:14px;top:14px;z-index:9999"><a href="/cliente/salir" ' +
         'style="background:#b91c1c;color:white;padding:12px;' +
         'border-radius:8px;text-decoration:none">' +
         'Cerrar sesión</a></div></body>'
@@ -1916,7 +1918,7 @@ app.get('/nuevo', (req, res) => {
   <body>
     <h1>➕ Nuevo perfil</h1>
     <div class="form-box">
-      <form method="POST" action="/guardar-perfil">
+      <form method="POST" action="/guardar-perfil"><input type="hidden" name="_cq2_crear" value="1">
         <label>ID del perfil</label>
         <input name="id" required />
 
@@ -2071,7 +2073,12 @@ app.post('/guardar-perfil', (req, res) => {
   }
 
   const data = leerData();
-  asegurarPerfil(data, id);
+  const propio = Object.prototype.hasOwnProperty.call(data,String(id));
+  if ((req.body._cq2_crear === '1' || !propio) &&
+      cq2IdExiste(String(id))) {
+    return res.status(409).send('Este ID ya existe');
+  }
+  asegurarPerfil(data,id);
 
   data[id].nombre = nombre || `Perfil ${id}`;
   data[id].chat_id = chat_id || '';

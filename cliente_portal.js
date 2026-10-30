@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const store = require('./clientes_store');
+const cq2IdExiste = require('./cq2_id_unico');
 
 const sesiones = new Map();
 
@@ -278,6 +279,11 @@ module.exports = function(app) {
           }
 
           const datos = leerPerfiles(req.cliente.id);
+          const propio = Object.prototype.hasOwnProperty.call(datos,id);
+          if ((req.body._cq2_crear === '1' || !propio) &&
+              cq2IdExiste(id)) {
+            return res.status(409).send('Este ID ya existe');
+          }
 
           if (!Object.prototype.hasOwnProperty.call(datos,id) &&
               Object.keys(datos).length >= Number(req.cliente.limite)) {
@@ -357,6 +363,12 @@ module.exports = function(app) {
           html = html.replace(
             /(<form\b[^>]*>)/gi,
             '$1' + csrfInput
+          );
+        }
+        if (original === '/nuevo' && typeof html === 'string') {
+          html = html.replace(
+            /(<form[^>]*action="\/cliente\/guardar-perfil"[^>]*>)/i,
+            '$1<input type="hidden" name="_cq2_crear" value="1">'
           );
         }
         return enviar(html);
@@ -659,7 +671,7 @@ app.use('/cliente', (req,res,next) => {
 
     const datos=leerPerfiles(c.id);
 
-    if(Object.prototype.hasOwnProperty.call(datos,id)) {
+    if (cq2IdExiste(id)) {
       return res.status(409).send('Perfil existente');
     }
 
