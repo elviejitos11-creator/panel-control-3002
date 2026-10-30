@@ -205,6 +205,144 @@ module.exports = function(app) {
   });
 
   app.use('/cliente',exigirSesion);
+
+  // CQ2_UN_PANEL_RUTAS_ORIGINALES_V1
+  app.use('/cliente', (req,res,next) => {
+    const ruta = req.path;
+    const metodo = req.method.toLowerCase();
+
+    let original = null;
+    let parametro = null;
+
+    if (metodo === 'get' && ruta === '/') {
+      original = '/';
+    } else if (metodo === 'get' && ruta === '/nuevo') {
+      original = '/nuevo';
+    } else if (metodo === 'get' &&
+               /^\/editar\/[A-Za-z0-9_-]{1,40}$/.test(ruta)) {
+      original = '/editar/:id';
+      parametro = ruta.split('/')[2];
+    } else if (metodo === 'post' &&
+               ['/guardar-perfil','/accion','/accion-global']
+                 .includes(ruta)) {
+      original = ruta;
+    } else {
+      return next();
+    }
+
+    try {
+      if (metodo === 'post') {
+        const token = sesiones.get(cookie(req));
+        if (!token ||
+            !req.body ||
+            req.body._csrf !== token.csrf) {
+          return res.sendStatus(403);
+        }
+
+        if (original === '/guardar-perfil') {
+          const id = String(req.body.id || '');
+
+          if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+            return res.status(400).send('ID invalido');
+          }
+
+          const datos = leerPerfiles(req.cliente.id);
+
+          if (!Object.prototype.hasOwnProperty.call(datos,id) &&
+              Object.keys(datos).length >= Number(req.cliente.limite)) {
+            return res.status(403).send(
+              'Limite de perfiles alcanzado'
+            );
+          }
+        }
+
+        if (original === '/accion') {
+          const id = String(req.body.id || '');
+          const accion = String(req.body.accion || '');
+
+          if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
+              ![
+                'pausar','reanudar','resetacceso',
+                'progpausa','progreanudar',
+                'ultima','foto','reiniciar','borrarperfil'
+              ].includes(accion)) {
+            return res.sendStatus(400);
+          }
+
+          if (!Object.prototype.hasOwnProperty.call(
+            leerPerfiles(req.cliente.id),id
+          )) return res.sendStatus(404);
+        }
+
+        if (original === '/accion-global' &&
+            !['pausar_todas','reanudar_todas']
+              .includes(String(req.body.accion || ''))) {
+          return res.sendStatus(400);
+        }
+      }
+
+      const layer = app._router.stack.find(l =>
+        l.route &&
+        l.route.path === original &&
+        l.route.methods[metodo]
+      );
+
+      if (!layer) {
+        return res.status(500).send(
+          'Ruta original no disponible'
+        );
+      }
+
+      const ejecutar = layer.route.stack[0].handle;
+
+      if (parametro) req.params = {id:parametro};
+
+      const enviar = res.send.bind(res);
+      const redirigir = res.redirect.bind(res);
+
+      res.redirect = function(destino) {
+        return redirigir(
+          destino === '/' ? '/cliente' : destino
+        );
+      };
+
+      res.send = function(html) {
+        if (typeof html === 'string' &&
+            /<form\b/i.test(html)) {
+          html = html.replace(
+            /action="\/guardar-perfil"/g,
+            'action="/cliente/guardar-perfil"'
+          );
+
+          html = html.replace(
+            /href="\/"/g,
+            'href="/cliente"'
+          );
+
+          const csrfInput =
+            '<input type="hidden" name="_csrf" value="' +
+            String(req.csrfCliente) + '">';
+
+          html = html.replace(
+            /(<form\b[^>]*>)/gi,
+            '$1' + csrfInput
+          );
+        }
+        return enviar(html);
+      };
+
+      return app.locals.cq2ConCliente(
+        req.cliente,
+        () => ejecutar(req,res,next)
+      );
+
+    } catch(e) {
+      console.error('[CQ2 PANEL UNICO]',e.message);
+      return res.status(500).send(
+        'Error procesando el perfil'
+      );
+    }
+  });
   // CQ_CONTROL_SESIONES_CLIENTES_V1
   app.get('/cliente/session-check',(req,res)=>{
     res.setHeader('Cache-Control','no-store');
@@ -285,9 +423,12 @@ module.exports = function(app) {
 
 
 // CQ_AGENDA_V12_CORREGIDA
-const cqRutaEstadoAgenda12 = "C:\\Users\\yeimy\\OneDrive\\Documents\\ESCRITORIO GUARDADO CQ\\PANEL_PRO3_CLIENTES_DESARROLLO\\clientes_data\\jean_bot_estado.json";
 
 app.get('/cliente/agenda-datos', (req,res) => {
+  const cqRutaEstadoAgenda12 = path.join(
+    store.carpetaCliente(req.cliente.id),
+    'bot_state.json'
+  );
   try {
     const datos = JSON.parse(
       fs.readFileSync(cqRutaEstadoAgenda12, 'utf8')

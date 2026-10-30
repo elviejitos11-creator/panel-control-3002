@@ -1,3 +1,4 @@
+// CQ2_PANEL_UNICO_CORREGIDO_V1
 // CQ2_API_SEGURA_V1
 // CQ2_MOTOR_SEGURO_V2
 const express = require('express');
@@ -14,6 +15,35 @@ try {
 }
 
 const app = express();
+
+// CQ2_UN_PANEL_DATOS_PRIVADOS_V1
+const { AsyncLocalStorage } = require('async_hooks');
+const cq2Contexto = new AsyncLocalStorage();
+
+function cq2Archivo(nombre) {
+  const sesion = cq2Contexto.getStore();
+  if (!sesion) return null;
+
+  return path.join(
+    require('./clientes_store').carpetaCliente(sesion.id),
+    nombre
+  );
+}
+
+app.locals.cq2ConCliente = (cliente, fn) => {
+  if (!cliente || !cliente.id) {
+    throw new Error('Cliente no autenticado');
+  }
+  return cq2Contexto.run({ id: cliente.id }, fn);
+};
+
+app.locals.cq2PerfilesCliente = cliente => {
+  const archivo = path.join(
+    require('./clientes_store').carpetaCliente(cliente.id),
+    'data.json'
+  );
+  return JSON.parse(fs.readFileSync(archivo, 'utf8'));
+};
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
@@ -77,19 +107,7 @@ app.get('/admin/panel/:id', (req, res) => {
       if (typeof html === 'string') {
         const id = encodeURIComponent(cliente.id);
 
-        const boton =
-          '<div style="margin:16px 0">' +
-          '<a href="/admin/cliente/' + id + '/nuevo" ' +
-          'style="display:inline-block;background:#fb7900;' +
-          'color:white;padding:12px 16px;border-radius:8px;' +
-          'text-decoration:none;font:bold 15px Arial">' +
-          '➕ Nuevo perfil</a></div>';
-
-        html = html.replace(
-          /(<h1[^>]*>[\s\S]*?<\/h1>)/i,
-          '$1' + boton
-        );
-      }
+              }
 
       return enviarOriginal(html);
     };
@@ -473,28 +491,28 @@ function leerJSONSeguro(file, backupFile, fallback, opciones = {}) {
 }
 
 function leerData() {
-  return leerJSONSeguro(DATA_FILE, DATA_BACKUP_FILE, {}, { protegerContraVacio: true });
+  const f = cq2Archivo('data.json');
+  return leerJSONSeguro(f || DATA_FILE, f ? f + '.backup' : DATA_BACKUP_FILE, {}, { protegerContraVacio: true });
 }
 
 function leerState() {
+  const f = cq2Archivo('bot_state.json');
   return leerJSONSeguro(
-    STATE_FILE,
-    STATE_BACKUP_FILE,
-    {
-      offset: 0,
-      schedules: [],
-      esperandoFoto: null
-    },
+    f || STATE_FILE,
+    f ? f + '.backup' : STATE_BACKUP_FILE,
+    { offset: 0, schedules: [], esperandoFoto: null },
     { protegerContraVacio: false }
   );
 }
 
 function guardarData(data) {
-  return guardarJSONSeguro(DATA_FILE, DATA_BACKUP_FILE, data);
+  const f = cq2Archivo('data.json');
+  return guardarJSONSeguro(f || DATA_FILE, f ? f + '.backup' : DATA_BACKUP_FILE, data);
 }
 
 function guardarState(state) {
-  return guardarJSONSeguro(STATE_FILE, STATE_BACKUP_FILE, state);
+  const f = cq2Archivo('bot_state.json');
+  return guardarJSONSeguro(f || STATE_FILE, f ? f + '.backup' : STATE_BACKUP_FILE, state);
 }
 
 function horaActual() {
@@ -1716,73 +1734,57 @@ const cq2RenderOriginal = (req, res) => {
   </html>
   `;
 
-  // CQ2_RENDER_ORIGINAL_COMPARTIDO_V2
+    // CQ2_UN_PANEL_RENDER_PRIVADO_V1
   if (req.cliente) {
     const csrf = String(req.csrfCliente || '');
-    // CQ2_ACCIONES_ADMIN_SEGURAS_V1
-    if (req.cq2AdminVista === true) {
-      const cid = encodeURIComponent(req.cliente.id);
 
-      // Mantener los botones que tienen operacion privada validada.
-      html = html.replace(
-        /fetch\('\/accion',/g,
-        "fetch('/admin/cliente/" + cid + "/accion',"
-      );
-
-      // No permitir que acciones globales usen el motor del administrador.
-      html = html.replace(
-        /<button\b[^>]*onclick="accionGlobal\([^"]*"[^>]*>[\s\S]*?<\/button>/gi,
-        ''
-      );
-
-      // Edicion y operaciones aun no conectadas se bloquean.
-      html = html.replace(
-        /<a\b[^>]*href="\/editar\/[^"]*"[^>]*>[\s\S]*?<\/a>/gi,
-        ''
-      );
-      html = html.replace(
-        /<button\b[^>]*onclick="accionPerfil\('[^']+','(?:resetacceso|progpausa|progreanudar|ultima|foto|borrarperfil)'\)"[^>]*>[\s\S]*?<\/button>/gi,
-        ''
-      );
-    }
     html = html.replace(
       /<a[^>]*href="\/administracion"[^>]*>[\s\S]*?<\/a>/gi,
       ''
     );
 
-    html = html.replace(
-      /href="\/nuevo"/g,
-      'href="/cliente/formulario-original"'
-    );
+    if (!req.cq2AdminVista) {
+      html = html.replace(
+        /href="\/nuevo"/g,
+        'href="/cliente/nuevo"'
+      );
 
-    html = html.replace(
-      /href="\/editar\/([^"]+)"/g,
-      'href="/cliente/editar?id=$1"'
-    );
+      html = html.replace(
+        /href="\/editar\/([^"]+)"/g,
+        'href="/cliente/editar/$1"'
+      );
 
-    html = html.replace(
-      /fetch\('\/accion'/g,
-      "fetch('/cliente/cq-accion'"
-    );
+      html = html.replace(
+        /fetch\('\/accion'/g,
+        "fetch('/cliente/accion'"
+      );
 
-    html = html.replace(
-      /fetch\('\/accion-global'/g,
-      "fetch('/cliente/cq-accion-global'"
-    );
+      html = html.replace(
+        /fetch\('\/accion-global'/g,
+        "fetch('/cliente/accion-global'"
+      );
 
-    html = html.replace(
-      'JSON.stringify({ id, accion })',
-      'JSON.stringify({ id, accion, _csrf: ' +
-      JSON.stringify(csrf) + ' })'
-    );
+      html = html.replace(
+        'JSON.stringify({ id, accion })',
+        'JSON.stringify({ id, accion, _csrf: ' +
+        JSON.stringify(csrf) + ' })'
+      );
 
-    html = html.replace(
-      'JSON.stringify({ accion })',
-      'JSON.stringify({ accion, _csrf: ' +
-      JSON.stringify(csrf) + ' })'
-    );
-  }
-  res.send(html);
+      html = html.replace(
+        'JSON.stringify({ accion })',
+        'JSON.stringify({ accion, _csrf: ' +
+        JSON.stringify(csrf) + ' })'
+      );
+
+      html = html.replace(
+        /<\/body>/i,
+        '<div style="margin:20px 0"><a href="/cliente/salir" ' +
+        'style="background:#b91c1c;color:white;padding:12px;' +
+        'border-radius:8px;text-decoration:none">' +
+        'Cerrar sesión</a></div></body>'
+      );
+    }
+  }  res.send(html);
 };
 
 // Reutilizar el mismo motor de renderizado.
