@@ -172,6 +172,36 @@ module.exports = function(app) {
 
     return iniciarSesionCliente(req,res,c);
   });
+  // CQ2_LOGIN_CLIENTES_EN_PANEL_PRINCIPAL_V1
+  // Misma pantalla /login para administrador y clientes.
+  // Si las credenciales son de un cliente, entra en su espacio.
+  // Si no, continua con el login original del administrador.
+
+  app.post('/login', (req, res, next) => {
+    const usuario = String(req.body?.usuario || '');
+    const clave = String(req.body?.clave || '');
+
+    if (!usuario || !clave) {
+      return next();
+    }
+
+    let cliente = null;
+
+    try {
+      cliente = store.autenticar(usuario, clave);
+    } catch (error) {
+      console.error('[CQ2 LOGIN CLIENTE]', error.message);
+      return res.status(500).send(
+        'Error verificando el acceso'
+      );
+    }
+
+    if (!cliente) {
+      return next();
+    }
+
+    return iniciarSesionCliente(req, res, cliente);
+  });
   const fallos = new Map();
 
   app.post('/cliente/login',(req,res)=>{
