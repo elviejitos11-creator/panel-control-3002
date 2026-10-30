@@ -71,6 +71,29 @@ app.get('/admin/panel/:id', (req, res) => {
 
     res.setHeader('Cache-Control', 'no-store');
 
+    const enviarOriginal = res.send.bind(res);
+
+    res.send = function(html) {
+      if (typeof html === 'string') {
+        const id = encodeURIComponent(cliente.id);
+
+        const boton =
+          '<div style="margin:16px 0">' +
+          '<a href="/admin/cliente/' + id + '/nuevo" ' +
+          'style="display:inline-block;background:#fb7900;' +
+          'color:white;padding:12px 16px;border-radius:8px;' +
+          'text-decoration:none;font:bold 15px Arial">' +
+          '➕ Nuevo perfil</a></div>';
+
+        html = html.replace(
+          /(<h1[^>]*>[\s\S]*?<\/h1>)/i,
+          '$1' + boton
+        );
+      }
+
+      return enviarOriginal(html);
+    };
+
     return app.locals.cq2RenderOriginal(req, res);
   } catch (error) {
     console.error('[CQ2 ADMIN PANEL]', error.message);
@@ -80,6 +103,147 @@ app.get('/admin/panel/:id', (req, res) => {
   }
 });
 // FIN CQ2_PANEL_ADMIN_CLIENTE_ORIGINAL_V3
+// CQ2_CREACION_ADMIN_CLIENTE_V1
+const cq2FormularioAdminOriginal = "\u003chtml\u003e\r\n  \u003chead\u003e\r\n    \u003cmeta charset=\"UTF-8\" /\u003e\r\n    \u003ctitle\u003eNuevo perfil\u003c/title\u003e\r\n    \u003cstyle\u003e\r\n      body { background:#0b1c2c; color:white; font-family:Arial,sans-serif; margin:0; padding:20px; }\r\n      input, textarea, select { width:100%; padding:10px; border-radius:8px; border:none; margin-top:4px; margin-bottom:12px; }\r\n      label { font-weight:bold; }\r\n      .form-box { max-width:700px; background:#132f4c; padding:20px; border-radius:14px; }\r\n      button, a { padding:10px 14px; border:none; border-radius:10px; text-decoration:none; display:inline-block; }\r\n      .success { background:#2e7d32; color:white; }\r\n      .muted { background:#455a64; color:white; }\r\n    \u003c/style\u003e\r\n  \u003c/head\u003e\r\n  \u003cbody\u003e\r\n    \u003ch1\u003e➕ Nuevo perfil\u003c/h1\u003e\r\n    \u003cdiv class=\"form-box\"\u003e\r\n      \u003cform method=\"POST\" action=\"/admin/cliente/__CID__/guardar\"\u003e\r\n        \u003clabel\u003eID del perfil\u003c/label\u003e\r\n        \u003cinput name=\"id\" required /\u003e\r\n\r\n        \u003clabel\u003eNombre\u003c/label\u003e\r\n        \u003cinput name=\"nombre\" /\u003e\r\n\r\n        \u003clabel\u003eChat ID\u003c/label\u003e\r\n        \u003cinput name=\"chat_id\" /\u003e\r\n\r\n        \u003clabel\u003eCliente token / Clave de acceso\u003c/label\u003e\r\n        \u003cinput name=\"cliente_token\" /\u003e\r\n\r\n        \u003clabel\u003eTeléfono\u003c/label\u003e\r\n        \u003cinput name=\"telefono\" /\u003e\r\n\r\n        \u003clabel\u003eCódigo\u003c/label\u003e\r\n        \u003cinput name=\"codigo\" /\u003e\r\n\r\n        \u003clabel\u003eUbicación\u003c/label\u003e\r\n        \u003cinput name=\"ubicacion\" /\u003e\r\n\r\n        \u003clabel\u003eTexto\u003c/label\u003e\r\n        \u003ctextarea name=\"texto\"\u003e\u003c/textarea\u003e\r\n\r\n        \u003clabel\u003eEstado\u003c/label\u003e\r\n        \u003cselect name=\"estado\"\u003e\r\n          \u003coption value=\"ACTIVA\"\u003eACTIVA\u003c/option\u003e\r\n          \u003coption value=\"PAUSADA\"\u003ePAUSADA\u003c/option\u003e\r\n        \u003c/select\u003e\r\n\r\n        \u003clabel\u003eFoto modelo (URL o file_id)\u003c/label\u003e\r\n        \u003cinput name=\"foto_modelo\" /\u003e\r\n\r\n        \u003clabel\u003eFoto página (URL o file_id)\u003c/label\u003e\r\n        \u003cinput name=\"foto_pagina\" /\u003e\r\n\r\n        \u003clabel\u003ePróximo post\u003c/label\u003e\r\n        \u003cinput name=\"proximo_post\" value=\"16m\" /\u003e\r\n\r\n        \u003clabel\u003eFin de plan\u003c/label\u003e\r\n        \u003cinput name=\"fin_plan\" value=\"7 días\" /\u003e\r\n\r\n        \u003cbutton class=\"success\" type=\"submit\"\u003eGuardar perfil\u003c/button\u003e\r\n        \u003ca class=\"muted\" href=\"/admin/panel/__CID__\"\u003eVolver\u003c/a\u003e\r\n      \u003c/form\u003e\r\n    \u003c/div\u003e\r\n  \u003c/body\u003e\r\n  \u003c/html\u003e";
+
+function cq2AdminCliente(req, res, next) {
+  if (req.admin !== true) return res.sendStatus(403);
+
+  const store = require('./clientes_store');
+  const cliente = store.listar().find(
+    c => c.id === req.params.id
+  );
+
+  if (!cliente) return res.sendStatus(404);
+
+  if (req.method === 'POST') {
+    const origen = req.get('origin');
+    const esperado =
+      (req.get('x-forwarded-proto') || req.protocol) +
+      '://' + req.get('host');
+
+    if (origen && origen !== esperado) {
+      return res.sendStatus(403);
+    }
+  }
+
+  req.cq2ClienteAdmin = cliente;
+  next();
+}
+
+app.get(
+  '/admin/cliente/:id/nuevo',
+  cq2AdminCliente,
+  (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+
+    const id = encodeURIComponent(req.cq2ClienteAdmin.id);
+
+    return res.type('html').send(
+      cq2FormularioAdminOriginal.replaceAll('__CID__', id)
+    );
+  }
+);
+
+app.post(
+  '/admin/cliente/:id/guardar',
+  cq2AdminCliente,
+  (req, res) => {
+    try {
+      const store = require('./clientes_store');
+      const c = req.cq2ClienteAdmin;
+      const archivo = path.join(
+        store.carpetaCliente(c.id), 'data.json'
+      );
+
+      const datos = JSON.parse(
+        fs.readFileSync(archivo, 'utf8')
+      );
+
+      if (!datos || typeof datos !== 'object' ||
+          Array.isArray(datos)) {
+        throw new Error('Datos de cliente invalidos');
+      }
+
+      const id = String(req.body.id || '').trim();
+
+      if (!/^[a-zA-Z0-9_-]{1,40}$/.test(id)) {
+        return res.status(400).send('ID invalido');
+      }
+
+      if (Object.prototype.hasOwnProperty.call(datos, id)) {
+        return res.status(409).send('El perfil ya existe');
+      }
+
+      if (Object.keys(datos).length >= c.limite) {
+        return res.status(403).send('Limite de perfiles alcanzado');
+      }
+
+      const campos = [
+        'nombre','chat_id','cliente_token','telefono',
+        'codigo','ubicacion','texto','estado',
+        'foto_modelo','foto_pagina','proximo_post','fin_plan'
+      ];
+
+      const perfil = {};
+
+      for (const campo of campos) {
+        const valor = req.body[campo];
+
+        if (valor !== undefined && typeof valor !== 'string') {
+          return res.status(400).send('Campo invalido');
+        }
+
+        const maximo = campo === 'texto' ? 5000 : 500;
+
+        if (String(valor || '').length > maximo) {
+          return res.status(400).send('Campo demasiado largo');
+        }
+
+        perfil[campo] = String(valor || '').trim();
+      }
+
+      if (!perfil.nombre) perfil.nombre = 'Perfil ' + id;
+
+      if (perfil.chat_id &&
+          !/^-?[0-9]{5,20}$/.test(perfil.chat_id)) {
+        return res.status(400).send('Chat ID invalido');
+      }
+
+      if (!['ACTIVA','PAUSADA'].includes(perfil.estado)) {
+        return res.status(400).send('Estado invalido');
+      }
+
+      perfil.ultima_hora = new Date().toISOString();
+      perfil.ultima_accion = 'Perfil creado desde administracion';
+      perfil.ultimaAccion = perfil.ultima_accion;
+      perfil.bump_hoy = 0;
+      perfil.bump_total = 0;
+      perfil.historial_fotos = [];
+
+      datos[id] = perfil;
+
+      const temporal = archivo + '.tmp';
+      fs.writeFileSync(
+        temporal,
+        JSON.stringify(datos, null, 2),
+        'utf8'
+      );
+      fs.renameSync(temporal, archivo);
+
+      return res.redirect(
+        '/admin/panel/' + encodeURIComponent(c.id)
+      );
+
+    } catch (error) {
+      console.error('[CQ2 CREAR ADMIN]', error.message);
+      return res.status(500).send(
+        'No se pudo guardar el perfil'
+      );
+    }
+  }
+);
+// FIN CQ2_CREACION_ADMIN_CLIENTE_V1
 // FIN CQ2_INTEGRACION_CLIENTES_V1
 
 // CQ2_CORS_SEGURO_V1
