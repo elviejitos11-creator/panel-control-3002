@@ -76,6 +76,151 @@ app.use('/accion', (req, res, next) => {
 });
 
 app.use(express.json({ limit: '25mb' }));
+
+// CQ2_LOBO_ONOFF_SEGURO_V2
+// Control remoto autenticado, sin cambiar el panel web.
+app.use('/accion', async (req, res, next) => {
+  const origen = String(req.get('origin') || '');
+
+  const esLobito =
+    /^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i
+      .test(origen);
+
+  if (!esLobito) return next();
+
+  res.setHeader('Access-Control-Allow-Origin', origen);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, X-Cliente-Token'
+  );
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  if (req.method !== 'POST') {
+    return res.sendStatus(405);
+  }
+
+  const id = String(req.body?.id || '').trim();
+  const accion = String(req.body?.accion || '').trim();
+  const token = String(
+    req.get('X-Cliente-Token') || req.body?.token || ''
+  ).trim();
+
+  if (
+    !/^[A-Za-z0-9_-]{1,50}$/.test(id) ||
+    !['pausar', 'reanudar'].includes(accion)
+  ) {
+    return res.status(400).json({
+      ok: false,
+      error: 'SOLICITUD_INVALIDA'
+    });
+  }
+
+  try {
+    const cryptoCQ2 = require('crypto');
+
+    function comprobarToken(recibido, esperado) {
+      if (!recibido || !esperado) return false;
+
+      const a = cryptoCQ2.createHash('sha256')
+        .update(recibido).digest();
+
+      const b = cryptoCQ2.createHash('sha256')
+        .update(esperado).digest();
+
+      return cryptoCQ2.timingSafeEqual(a, b);
+    }
+
+    const datos = leerData();
+
+    if (!Object.prototype.hasOwnProperty.call(datos, id)) {
+      return res.status(404).json({
+        ok: false,
+        estado: 'NO_EXISTE'
+      });
+    }
+
+    const perfil = datos[id];
+
+    const tokenPerfil =
+      String(perfil.cliente_token || '').trim();
+
+    // SIN CLAVE conserva su estado sin clave de perfil.
+    // Su conexion remota exige una clave separada.
+    const claveRemota =
+      String(process.env.CQ2_EXTENSION_KEY || '').trim();
+
+    const autorizado = tokenPerfil
+      ? comprobarToken(token, tokenPerfil)
+      : claveRemota.length >= 32 &&
+        comprobarToken(token, claveRemota);
+
+    if (!autorizado) {
+      return res.status(403).json({
+        ok: false,
+        estado: 'NO_AUTORIZADO'
+      });
+    }
+
+    if (accion === 'reanudar' && planVencido(perfil)) {
+      return res.status(403).json({
+        ok: false,
+        estado: 'VENCIDA'
+      });
+    }
+
+    const estado =
+      accion === 'pausar' ? 'PAUSADA' : 'ACTIVA';
+
+    const guardado = await cambiarEstadoPerfil(id, estado);
+
+    if (!guardado) {
+      return res.status(500).json({
+        ok: false,
+        error: 'NO_GUARDADO'
+      });
+    }
+
+    const confirmado = leerData()[id];
+
+    if (confirmado?.estado !== estado) {
+      return res.status(500).json({
+        ok: false,
+        error: 'NO_CONFIRMADO'
+      });
+    }
+
+    res.json({
+      ok: true,
+      id,
+      estado
+    });
+
+    if (typeof enviarEstadoPerfil === 'function') {
+      Promise.resolve()
+        .then(() => enviarEstadoPerfil(id))
+        .catch(e => console.error(
+          '[CQ2 TELEGRAM]', e.message
+        ));
+    }
+
+  } catch (e) {
+    console.error('[CQ2 LOBO ONOFF]', e.message);
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        ok: false,
+        error: 'ERROR_INTERNO'
+      });
+    }
+  }
+});
+
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // CQ2_LOGO_ORIGINAL_V3
