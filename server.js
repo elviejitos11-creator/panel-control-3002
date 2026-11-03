@@ -46,6 +46,35 @@ app.locals.cq2PerfilesCliente = cliente => {
   );
   return JSON.parse(fs.readFileSync(archivo, 'utf8'));
 };
+// CQ2_CORS_PREFLIGHT_FIX_V1
+// Permitir solamente el preflight de MegaPersonals.
+// El POST conserva sus controles de autenticacion.
+app.use('/accion', (req, res, next) => {
+  const origen = String(req.headers.origin || '');
+
+  const permitido =
+    /^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i.test(origen);
+
+  if (!permitido) return next();
+
+  res.setHeader('Access-Control-Allow-Origin', origen);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'POST, OPTIONS'
+  );
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, X-Cliente-Token'
+  );
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  return next();
+});
+
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
