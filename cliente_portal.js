@@ -272,6 +272,47 @@ module.exports = function(app) {
     }
   });
 
+  // CQ2_ONOFF_CLIENTE_CORREGIDO_V1
+  // Los botones del cliente usan su propia sesion.
+  app.use('/cliente', (req, res, next) => {
+    if (req.method !== 'GET' || req.path !== '/') {
+      return next();
+    }
+
+    const enviar = res.send.bind(res);
+
+    res.send = function(html) {
+      if (typeof html !== 'string') {
+        return enviar(html);
+      }
+
+      const csrf = JSON.stringify(req.csrfCliente || '');
+
+      html = html.replace(
+        /fetch\(['"]\/accion['"]/g,
+        "fetch('/cliente/cq-accion'"
+      );
+
+      html = html.replace(
+        /fetch\(['"]\/accion-global['"]/g,
+        "fetch('/cliente/accion-global'"
+      );
+
+      html = html.replace(
+        /JSON\.stringify\(\{\s*id\s*,\s*accion\s*\}\)/g,
+        'JSON.stringify({ id, accion, _csrf: ' + csrf + ' })'
+      );
+
+      html = html.replace(
+        /JSON\.stringify\(\{\s*accion\s*\}\)/g,
+        'JSON.stringify({ accion, _csrf: ' + csrf + ' })'
+      );
+
+      return enviar(html);
+    };
+
+    next();
+  });
   // CQ2_UN_PANEL_RUTAS_ORIGINALES_V1
   app.use('/cliente', (req,res,next) => {
     const ruta = req.path;
