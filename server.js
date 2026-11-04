@@ -342,6 +342,7 @@ app.get('/manifest.webmanifest',(req,res)=>{
     path.join(__dirname,'public','manifest.webmanifest')
   );
 });
+require('./cq_multicliente')(app); // CQ2_MULTICLIENTE_ONOFF_V3
 require('./seguridad_admin')(app);
 require('./admin_api')(app);
 
