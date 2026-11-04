@@ -32,6 +32,7 @@
   const MAX_FALLOS_FASE2 = 45;
   const ALERTA_COOLDOWN_MS = 10 * 60 * 1000;
 
+  let cq2IdNuevo = false;
   function obtenerPerfilId() {
     let id = localStorage.getItem(KEY_PERFIL_GLOBAL);
 
@@ -47,6 +48,7 @@
 
       id = String(id).trim();
       localStorage.setItem(KEY_PERFIL_GLOBAL, id);
+      cq2IdNuevo = true;
     }
 
     return String(id).trim();
@@ -61,12 +63,12 @@
   function obtenerClienteToken() {
     let token = localStorage.getItem(KEY_TOKEN_GLOBAL);
 
-    if (!token || !String(token).trim()) {
+    if (cq2IdNuevo || !token || !String(token).trim()) {
       token = prompt(
         `PANEL 2 - Escribe la clave de conexión del perfil ${PERFIL_ID}:`
       );
 
-      if (!token || !String(token).trim()) {
+      if (cq2IdNuevo || !token || !String(token).trim()) {
         alert('Falta la clave de conexión.');
         return '';
       }
@@ -535,7 +537,7 @@
     }
   }
 
-  async function cambiarEstadoEnPanel(id, accion) {
+  async function cambiarEstadoEnPanel(id, accion, reintento = false) {
     const controller = new AbortController();
 
     const timer = setTimeout(
@@ -572,6 +574,21 @@
       }
 
       if (!respuesta.ok) {
+        if (respuesta.status === 403 && !reintento) {
+          localStorage.removeItem(KEY_TOKEN_GLOBAL);
+
+          const nuevaClave = prompt(
+            `PANEL 2 - Clave rechazada para el perfil ${id}.\n` +
+            'Introduce la clave de conexion correcta:'
+          );
+
+          if (nuevaClave && nuevaClave.trim()) {
+            CLIENTE_TOKEN = nuevaClave.trim();
+            localStorage.setItem(KEY_TOKEN_GLOBAL, CLIENTE_TOKEN);
+
+            return await cambiarEstadoEnPanel(id, accion, true);
+          }
+        }
         let detalle = '';
 
         try {
