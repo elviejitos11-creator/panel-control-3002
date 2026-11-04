@@ -277,6 +277,11 @@ app.get('/admin/panel/:id', (req, res) => {
             '}' +
             '</script>';
 
+                    // CQ2_ADMIN_BOTONES_RUTA_CORRECTA_V1
+          html = html.replace(
+            /fetch\('\/accion'/g,
+            "fetch('/admin/cliente/" + cid + "/accion'"
+          );
           html = html.replace(/<\/body>/i,script+'</body>');
         }
         return enviarOriginal(html);
