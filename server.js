@@ -1412,7 +1412,7 @@ app.get('/api/licencia/:id', (req, res) => {
       });
     }
 
-    if (perfil.cliente_token && !tokenValidoParaPerfil(req, perfil)) {
+    if (!tokenValidoParaPerfil(req, perfil)) {
       return res.json({
         ok: false,
         estado: 'TOKEN_INVALIDO',
