@@ -49,6 +49,61 @@ function identificar(id, token) {
     encontrado = { cliente, archivo, datos, perfil };
   }
 
+  // CQ2_ADMIN_CLIENTE_UNIFICADO_V4
+  // Buscar el perfil administrativo si no pertenece
+  // a ningun cliente autenticado.
+  if (!encontrado) {
+    const raiz =
+      process.env.DATA_DIR ||
+      process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+      __dirname;
+
+    const archivo = path.join(raiz, 'data.json');
+
+    if (fs.existsSync(archivo)) {
+      const datos = JSON.parse(
+        fs.readFileSync(archivo, 'utf8')
+      );
+
+      if (
+        datos &&
+        typeof datos === 'object' &&
+        !Array.isArray(datos) &&
+        Object.prototype.hasOwnProperty.call(datos, id)
+      ) {
+        const perfil = datos[id];
+
+        const tokenPerfil = String(
+          perfil?.cliente_token || ''
+        ).trim();
+
+        const claveRemota = String(
+          process.env.CQ2_EXTENSION_KEY || ''
+        ).trim();
+
+        const esperado = tokenPerfil || claveRemota;
+
+        if (esperado.length >= 12 && token) {
+          const a = crypto.createHash('sha256')
+            .update(String(token)).digest();
+
+          const b = crypto.createHash('sha256')
+            .update(esperado).digest();
+
+          if (crypto.timingSafeEqual(a, b)) {
+            encontrado = {
+              admin: true,
+              cliente: null,
+              archivo,
+              datos,
+              perfil
+            };
+          }
+        }
+      }
+    }
+  }
+
   return encontrado;
 }
 
@@ -157,11 +212,14 @@ module.exports = function(app) {
 
       res.json({ok:true,id,estado});
 
-      Promise.resolve().then(() =>
-        require('./jean_bot_cliente').enviar(
+      Promise.resolve().then(() => {
+        if (x.admin) {
+          return app.locals.cq2NotificarLobo(id);
+        }
+        return require('./jean_bot_cliente').enviar(
           x.cliente, id, x.perfil, x.perfil.ultima_accion
-        )
-      ).catch(error =>
+        );
+      }).catch(error =>
         console.error('[CQ2 TELEGRAM]', error.message)
       );
 
