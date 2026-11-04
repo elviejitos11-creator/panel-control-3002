@@ -927,11 +927,26 @@ function tokenDesdeRequest(req) {
 }
 
 function tokenValidoParaPerfil(req, perfil) {
-  const token = tokenDesdeRequest(req);
+  if (!perfil) return false;
 
-  if (!perfil.cliente_token) return false;
+  const recibido = tokenDesdeRequest(req);
 
-  return token === String(perfil.cliente_token).trim();
+  const clavePerfil =
+    String(perfil.cliente_token || '').trim();
+
+  const claveGeneral =
+    String(process.env.CQ2_EXTENSION_KEY || '').trim();
+
+  const esperado = clavePerfil || claveGeneral;
+
+  if (!recibido || !esperado) return false;
+
+  const crypto = require('crypto');
+  const a = Buffer.from(recibido, 'utf8');
+  const b = Buffer.from(esperado, 'utf8');
+
+  return a.length === b.length &&
+    crypto.timingSafeEqual(a, b);
 }
 
 // =========================
@@ -1397,7 +1412,7 @@ app.get('/api/licencia/:id', (req, res) => {
       });
     }
 
-    if (perfil.cliente_token && token !== perfil.cliente_token) {
+    if (perfil.cliente_token && !tokenValidoParaPerfil(req, perfil)) {
       return res.json({
         ok: false,
         estado: 'TOKEN_INVALIDO',

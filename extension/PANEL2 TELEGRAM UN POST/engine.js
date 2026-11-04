@@ -56,7 +56,7 @@
   if (!PERFIL_ID) return;
 
   const KEY_TOKEN_GLOBAL =
-     `cq2_token_reconexion_v3_${PERFIL_ID}`;
+     `cq2_token_reconexion_v4_${PERFIL_ID}`;
 
   function obtenerClienteToken() {
     let token = localStorage.getItem(KEY_TOKEN_GLOBAL);
