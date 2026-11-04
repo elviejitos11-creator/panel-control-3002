@@ -1,54 +1,28 @@
 
 /*
- * LOBO PRO - 1 POST - PANEL 2
- * Version 6.9.2 - Dolphin Anty
- *
- * ID independiente para Panel 2.
- * Cambio de ID y clave desde el lobito.
- * ON/OFF confirmado por Railway.
- * Motor original de 16 minutos.
- * Requiere html2canvas.min.js.
+ * LOBO PRO - 1 POST - PANEL3 TELEGRAM CLIENTE
+ * Version 6.9 - Dolphin Anty
+ * Requiere html2canvas.min.js precargado
  */
 
 (function () {
   'use strict';
 
-  if (window.__CQ_LOBO_PANEL2_692) return;
-  window.__CQ_LOBO_PANEL2_692 = true;
+  const KEY_PERFIL_GLOBAL = 'PANEL_PERFIL_ID';
 
-  const PANEL_LOCAL = 'http://localhost:3002';
-  const PANEL_NUBE =
-    'https://panel-control-3002-production.up.railway.app';
-
-  const KEY_PERFIL_GLOBAL =
-    'CQ_PANEL2_LOBO_PERFIL_ID_V692';
-
-  const CICLO_MINUTOS = 16;
-  const DELAY_CONFIRMACION = 15;
-  const DELAY_SEGUNDO_TOQUE = 10;
-
-  const MAX_FALLOS_BOTON = 60;
-  const MAX_ESPERA_SWEET_MS = 120000;
-  const MAX_FALLOS_FASE2 = 45;
-  const ALERTA_COOLDOWN_MS = 10 * 60 * 1000;
-
-  let cq2IdNuevo = false;
   function obtenerPerfilId() {
     let id = localStorage.getItem(KEY_PERFIL_GLOBAL);
 
     if (!id || !String(id).trim()) {
-      id = prompt(
-        'PANEL 2 - Escribe el ID exacto del perfil:'
-      );
+      id = prompt('Escribe el ID del perfil del panel:');
 
       if (!id || !String(id).trim()) {
-        alert('Falta el ID. El lobito no iniciará.');
+        alert('Falta ID del perfil. El motor no va a trabajar.');
         return '';
       }
 
       id = String(id).trim();
       localStorage.setItem(KEY_PERFIL_GLOBAL, id);
-      cq2IdNuevo = true;
     }
 
     return String(id).trim();
@@ -57,19 +31,18 @@
   const PERFIL_ID = obtenerPerfilId();
   if (!PERFIL_ID) return;
 
-  const KEY_TOKEN_GLOBAL =
-     `cq2_token_reconexion_v4_${PERFIL_ID}`;
+  const KEY_TOKEN_GLOBAL = `PANEL_CLIENTE_TOKEN_${PERFIL_ID}`;
 
   function obtenerClienteToken() {
     let token = localStorage.getItem(KEY_TOKEN_GLOBAL);
 
-    if (cq2IdNuevo || !token || !String(token).trim()) {
+    if (!token || !String(token).trim()) {
       token = prompt(
-        `PANEL 2 - Escribe la clave de conexión del perfil ${PERFIL_ID}:`
+        `Escribe la clave de acceso del perfil ${PERFIL_ID}:`
       );
 
-      if (cq2IdNuevo || !token || !String(token).trim()) {
-        alert('Falta la clave de conexión.');
+      if (!token || !String(token).trim()) {
+        alert('Falta clave de acceso. El motor no va a trabajar.');
         return '';
       }
 
@@ -83,31 +56,35 @@
   let CLIENTE_TOKEN = obtenerClienteToken();
   if (!CLIENTE_TOKEN) return;
 
-  const KEY_ESTADO = `cq2_estado_${PERFIL_ID}`;
-  const KEY_FASE = `cq2_fase_${PERFIL_ID}`;
-  const KEY_NEXT = `cq2_next_${PERFIL_ID}`;
-  const KEY_DATOS = `cq2_datos_mega_${PERFIL_ID}`;
-  const KEY_ULTIMO_REPORTE =
-    `cq2_ultimo_reporte_${PERFIL_ID}`;
-  const KEY_ALERTA_BLOQUEADA =
-    `cq2_alerta_bloqueada_${PERFIL_ID}`;
-  const KEY_ULTIMA_ALERTA_TS =
-    `cq2_ultima_alerta_${PERFIL_ID}`;
-  const KEY_FALLOS_BOTON =
-    `cq2_fallos_boton_${PERFIL_ID}`;
-  const KEY_FASE1_INICIO =
-    `cq2_fase1_inicio_${PERFIL_ID}`;
-  const KEY_FASE2_FALLOS =
-    `cq2_fase2_fallos_${PERFIL_ID}`;
+  // PANEL3 - TELEGRAM CLIENTE
+  const PANEL_LOCAL = 'http://localhost:3002';
+  const PANEL_NUBE = 'https://panel-control-3002-production.up.railway.app';
 
-  let estadoLocal =
-    localStorage.getItem(KEY_ESTADO) || 'PAUSADA';
+  const CICLO_MINUTOS = 16;
+  const DELAY_CONFIRMACION = 15;
+  const DELAY_SEGUNDO_TOQUE = 10;
 
+  const MAX_FALLOS_BOTON = 60;
+  const MAX_ESPERA_SWEET_MS = 120000;
+  const MAX_FALLOS_FASE2 = 45;
+  const ALERTA_COOLDOWN_MS = 10 * 60 * 1000;
+
+  const KEY_ESTADO = `estado_${PERFIL_ID}`;
+  const KEY_FASE = `fase_${PERFIL_ID}`;
+  const KEY_NEXT = `next_${PERFIL_ID}`;
+  const KEY_DATOS = `datos_mega_${PERFIL_ID}`;
+  const KEY_ULTIMO_REPORTE = `ultimo_reporte_publicado_${PERFIL_ID}`;
+  const KEY_ALERTA_BLOQUEADA = `alerta_bloqueada_${PERFIL_ID}`;
+  const KEY_ULTIMA_ALERTA_TS = `ultima_alerta_ts_${PERFIL_ID}`;
+  const KEY_FALLOS_BOTON = `fallos_boton_${PERFIL_ID}`;
+  const KEY_FASE1_INICIO = `fase1_inicio_${PERFIL_ID}`;
+  const KEY_FASE2_FALLOS = `fase2_fallos_${PERFIL_ID}`;
+
+  let estadoLocal = localStorage.getItem(KEY_ESTADO) || 'PAUSADA';
   let lockoutReporte = false;
   let lockoutDatos = false;
   let avisoTokenInvalido = false;
   let lockoutAlerta = false;
-  let motorOcupado = false;
 
   let fase = parseInt(localStorage.getItem(KEY_FASE), 10);
   let nextTime = parseInt(localStorage.getItem(KEY_NEXT), 10);
@@ -124,7 +101,6 @@
   }
 
   function guardarEstado(estado) {
-    if (!['ACTIVA', 'PAUSADA'].includes(estado)) return;
     estadoLocal = estado;
     localStorage.setItem(KEY_ESTADO, estado);
   }
@@ -159,42 +135,31 @@
     limpiarBloqueoAlertaLocal();
   }
 
-  function cambiarConfiguracion() {
-    const confirmar = confirm(
-      '¿Quieres cambiar el ID y la clave del lobito del Panel 2?\n\n' +
-      'No se eliminará ningún perfil del servidor.'
-    );
-
-    if (!confirmar) return;
-
-    limpiarMemoriaAcceso();
-    window.location.reload();
-  }
-
   function bloquearPorClave(motivo) {
     if (avisoTokenInvalido) return;
 
     avisoTokenInvalido = true;
     guardarEstado('PAUSADA');
+    limpiarMemoriaAcceso();
 
     alert(
-      `${motivo || 'Acceso no autorizado'}.\n\n` +
-      'Verifica el ID y la clave del Panel 2.\n' +
-      'Puedes cambiarlos haciendo clic derecho en el lobito.'
+      `${motivo || 'Acceso inválido'}. Se borró el acceso viejo. El script pedirá ID y clave otra vez.`
     );
+
+    setTimeout(() => {
+      try {
+        window.location.reload();
+      } catch (e) {}
+    }, 1000);
   }
 
-  async function fetchJSONBase(base, ruta, options = {}) {
+  async function fetchJSONBase(base, path, options = {}) {
     const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      6000
-    );
+    const timer = setTimeout(() => controller.abort(), 6000);
 
     try {
-      const res = await fetch(`${base}${ruta}`, {
+      const res = await fetch(`${base}${path}`, {
         ...options,
-        headers: { ...(options.headers || {}), 'X-Cliente-Token': CLIENTE_TOKEN },
         cache: 'no-store',
         signal: controller.signal
       });
@@ -219,42 +184,35 @@
     };
 
     try {
-      const d = await fetchJSONBase(
+      const dataEstado = await fetchJSONBase(
         base,
-        `/api/estado/${encodeURIComponent(id)}?t=${Date.now()}`
+        `/api/estado/${id}?t=${Date.now()}`
       );
 
       resultado.estadoPanel =
-        String(d?.estado || '').toUpperCase();
+        String(dataEstado?.estado || '').toUpperCase();
+
     } catch (e) {
-      console.log(
-        'Estado no disponible:',
-        base,
-        e.message
-      );
+      console.log('No se pudo consultar estado en:', base, e.message);
     }
 
     try {
       const tokenSeguro = encodeURIComponent(CLIENTE_TOKEN);
 
-      const d = await fetchJSONBase(
+      const dataLicencia = await fetchJSONBase(
         base,
-        `/api/licencia/${encodeURIComponent(id)}` +
-        `?token=${tokenSeguro}&t=${Date.now()}`
+        `/api/licencia/${id}?token=${tokenSeguro}&t=${Date.now()}`
       );
 
       resultado.estadoLicencia =
-        String(d?.estado || '').toUpperCase();
+        String(dataLicencia?.estado || '').toUpperCase();
 
-      resultado.licenciaOk = d?.ok === true;
+      resultado.licenciaOk = dataLicencia?.ok === true;
       resultado.motivoLicencia =
-        String(d?.motivo || '');
+        String(dataLicencia?.motivo || '');
+
     } catch (e) {
-      console.log(
-        'Licencia no disponible:',
-        base,
-        e.message
-      );
+      console.log('No se pudo consultar licencia en:', base, e.message);
     }
 
     return resultado;
@@ -278,7 +236,7 @@
     try {
       if (!src || src.startsWith('data:')) return '';
       return new URL(src, window.location.href).href;
-    } catch {
+    } catch (e) {
       return '';
     }
   }
@@ -303,9 +261,7 @@
 
       const proporcion = ancho / alto;
 
-      if (proporcion > 1.7 || proporcion < 0.5) {
-        continue;
-      }
+      if (proporcion > 1.7 || proporcion < 0.5) continue;
 
       const area = ancho * alto;
       if (area < 90000) continue;
@@ -321,8 +277,7 @@
       a.y !== b.y ? b.y - a.y : b.area - a.area
     );
 
-    return [...new Set(fotos.map(f => f.src))]
-      .slice(0, 10);
+    return [...new Set(fotos.map(f => f.src))].slice(0, 10);
   }
 
   function leerDatosMega() {
@@ -368,7 +323,7 @@
   }
 
   async function registrarEventoEnPanel(payload) {
-    const cuerpo = {
+    const payloadSeguro = {
       ...payload,
       token: CLIENTE_TOKEN
     };
@@ -379,7 +334,7 @@
         'Content-Type': 'application/json',
         'X-Cliente-Token': CLIENTE_TOKEN
       },
-      body: JSON.stringify(cuerpo),
+      body: JSON.stringify(payloadSeguro),
       cache: 'no-store'
     };
 
@@ -394,23 +349,32 @@
         );
 
         if (res.status === 403) {
-          console.warn(
-            `Evento rechazado en ${nombre}: HTTP 403`
-          );
+          bloquearPorClave('Clave inválida o acceso reseteado');
+          return;
         }
       } catch (e) {
         console.log(
-          `No se pudo registrar evento en ${nombre}:`,
-          e.message
+          `No se pudo mandar al panel ${nombre}:`,
+          e
         );
       }
     }
   }
 
   async function registrarAlertaEnPanel(payload) {
-    const cuerpo = {
+    const payloadSeguro = {
       ...payload,
       token: CLIENTE_TOKEN
+    };
+
+    const opciones = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cliente-Token': CLIENTE_TOKEN
+      },
+      body: JSON.stringify(payloadSeguro),
+      cache: 'no-store'
     };
 
     let enviado = false;
@@ -422,22 +386,19 @@
       try {
         const res = await fetch(
           `${base}/registrar-alerta`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Cliente-Token': CLIENTE_TOKEN
-            },
-            body: JSON.stringify(cuerpo),
-            cache: 'no-store'
-          }
+          opciones
         );
+
+        if (res.status === 403) {
+          bloquearPorClave('Clave inválida o acceso reseteado');
+          return;
+        }
 
         if (res.ok) enviado = true;
       } catch (e) {
         console.log(
-          `No se pudo enviar alerta a ${nombre}:`,
-          e.message
+          `No se pudo mandar alerta al panel ${nombre}:`,
+          e
         );
       }
     }
@@ -456,8 +417,7 @@
       !datos.ubicacion &&
       !datos.texto &&
       !datos.foto_pagina &&
-      (!datos.fotos_pagina ||
-       datos.fotos_pagina.length === 0)
+      (!datos.fotos_pagina || datos.fotos_pagina.length === 0)
     ) {
       return;
     }
@@ -468,7 +428,6 @@
     if (firma === anterior) return;
 
     lockoutDatos = true;
-
     localStorage.setItem(KEY_DATOS, firma);
 
     await registrarEventoEnPanel({
@@ -481,7 +440,7 @@
       foto_modelo: datos.foto_pagina,
       fotos_pagina: datos.fotos_pagina,
       ultima_accion:
-        'Datos y fotos actualizados desde Mega',
+        'Datos y fotos actualizados automáticamente desde Mega',
       ultima_hora: new Date().toLocaleString()
     });
 
@@ -492,149 +451,97 @@
 
   async function consultarEstadoPerfil(id) {
     try {
-      const fuente = await consultarFuente(PANEL_NUBE, id);
+      const fuentes = await Promise.all([
+        consultarFuente(PANEL_LOCAL, id),
+        consultarFuente(PANEL_NUBE, id)
+      ]);
 
-      if (fuente.estadoLicencia === 'TOKEN_INVALIDO') {
-        bloquearPorClave('Clave de perfil inválida');
-        return 'PAUSADA';
-      }
-
-      if (
-        fuente.estadoLicencia === 'NO_EXISTE' ||
-        fuente.estadoPanel === 'NO_EXISTE'
-      ) {
+      if (fuentes.some(
+        f => f.estadoLicencia === 'TOKEN_INVALIDO'
+      )) {
         bloquearPorClave(
-          'El ID del perfil no existe en la API consultada'
+          'Clave de acceso incorrecta o acceso reseteado'
         );
         return 'PAUSADA';
       }
 
-      if (
-        fuente.estadoPanel === 'PAUSADA' ||
-        fuente.estadoLicencia === 'PAUSADA' ||
-        fuente.estadoLicencia === 'VENCIDA'
-      ) {
+      if (fuentes.some(f =>
+        f.estadoLicencia === 'NO_EXISTE' ||
+        f.estadoPanel === 'NO_EXISTE'
+      )) {
+        bloquearPorClave(
+          'El perfil ya no existe o fue cambiado'
+        );
+        return 'PAUSADA';
+      }
+
+      if (fuentes.some(f =>
+        f.estadoPanel === 'PAUSADA' ||
+        f.estadoLicencia === 'PAUSADA' ||
+        f.estadoLicencia === 'VENCIDA'
+      )) {
         guardarEstado('PAUSADA');
         return 'PAUSADA';
       }
 
-      if (
-        fuente.estadoPanel === 'ACTIVA' &&
-        fuente.licenciaOk === true &&
-        fuente.estadoLicencia === 'ACTIVA'
-      ) {
+      const panelActivo = fuentes.some(
+        f => f.estadoPanel === 'ACTIVA'
+      );
+
+      const licenciaActiva = fuentes.some(
+        f => f.licenciaOk === true &&
+             f.estadoLicencia === 'ACTIVA'
+      );
+
+      if (panelActivo && licenciaActiva) {
         guardarEstado('ACTIVA');
         return 'ACTIVA';
       }
 
-      return estadoLocal;
+      console.log(
+        'Sin confirmación clara. Mantiene estado actual:',
+        estadoLocal
+      );
+
+      return 'PAUSADA';
+
     } catch (e) {
       console.log(
-        'No se pudo consultar el panel:',
-        e.message
+        'Error consultando panel/licencia. Mantiene estado:',
+        estadoLocal
       );
-      return estadoLocal;
+
+      return 'PAUSADA';
     }
   }
 
-  async function cambiarEstadoEnPanel(id, accion, reintento = false) {
-    const controller = new AbortController();
+  async function cambiarEstadoEnPanel(id, accion) {
+    const payload = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ id, accion }),
+      cache: 'no-store'
+    };
 
-    const timer = setTimeout(
-      () => controller.abort(),
-      10000
-    );
-
-    try {
-      const respuesta = await fetch(
-        `${PANEL_NUBE}/accion`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Cliente-Token': CLIENTE_TOKEN
-          },
-          body: JSON.stringify({
-            id,
-            accion,
-            token: CLIENTE_TOKEN
-          }),
-          cache: 'no-store',
-          signal: controller.signal
-        }
-      );
-
-      if (
-        respuesta.redirected ||
-        new URL(respuesta.url).pathname === '/login'
-      ) {
-        throw new Error(
-          'El servidor redirigió la orden al login'
+    for (const [base, nombre] of [
+      [PANEL_LOCAL, 'local'],
+      [PANEL_NUBE, 'nube']
+    ]) {
+      try {
+        await fetch(`${base}/accion`, payload);
+      } catch (e) {
+        console.log(
+          `No se pudo cambiar estado en panel ${nombre}:`,
+          e
         );
       }
-
-      if (!respuesta.ok) {
-        if (respuesta.status === 403 && !reintento) {
-          localStorage.removeItem(KEY_TOKEN_GLOBAL);
-
-          const nuevaClave = prompt(
-            `PANEL 2 - Clave rechazada para el perfil ${id}.\n` +
-            'Introduce la clave de conexion correcta:'
-          );
-
-          if (nuevaClave && nuevaClave.trim()) {
-            CLIENTE_TOKEN = nuevaClave.trim();
-            localStorage.setItem(KEY_TOKEN_GLOBAL, CLIENTE_TOKEN);
-
-            return await cambiarEstadoEnPanel(id, accion, true);
-          }
-        }
-        let detalle = '';
-
-        try {
-          const d = await respuesta.json();
-          detalle = String(
-            d.estado || d.error || ''
-          );
-        } catch {}
-
-        if (respuesta.status === 404) {
-          throw new Error(
-            `HTTP 404: El ID ${id} no se encontró ` +
-            'en el almacenamiento de esta ruta. ' +
-            'Haz clic derecho en el lobito para cambiarlo.'
-          );
-        }
-
-        throw new Error(
-          `HTTP ${respuesta.status}` +
-          (detalle ? ` - ${detalle}` : '')
-        );
-      }
-
-      const resultado = await respuesta.json();
-
-      const esperado =
-        accion === 'pausar' ? 'PAUSADA' : 'ACTIVA';
-
-      if (
-        resultado.ok !== true ||
-        String(resultado.estado || '').toUpperCase()
-          !== esperado
-      ) {
-        throw new Error(
-          'Railway no confirmó el cambio de estado'
-        );
-      }
-
-      return esperado;
-    } finally {
-      clearTimeout(timer);
     }
   }
 
   function renderBoton() {
-    const idUI = `cq2-motor-panel-${PERFIL_ID}`;
+    const idUI = `motor-panel-${PERFIL_ID}`;
 
     const faltan = Math.max(
       0,
@@ -676,86 +583,46 @@
           transform:translateY(1px);
         ">🐺</span>
 
-        <div id="cq2-led-${PERFIL_ID}" style="
+        <div id="led-${PERFIL_ID}" style="
           width:12px;
           height:12px;
           border-radius:50%;
         "></div>
 
-        <span id="cq2-time-${PERFIL_ID}" style="
+        <span id="time-${PERFIL_ID}" style="
           color:#fff;
           font-size:16px;
           min-width:48px;
           text-align:center;
-        ">OFF</span>
+        ">0:00</span>
       `;
 
-      // CLIC DERECHO: cambiar ID y clave.
-      box.addEventListener('contextmenu', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        cambiarConfiguracion();
-      });
-
-      // CLIC NORMAL: activar o pausar.
       box.onpointerdown = async e => {
-        if (e.button !== 0) return;
-
         e.preventDefault();
         e.stopPropagation();
 
-        if (box.dataset.enviando === '1') return;
+        const accion = estadoLocal === 'ACTIVA'
+          ? 'pausar'
+          : 'reanudar';
 
-        box.dataset.enviando = '1';
+        await cambiarEstadoEnPanel(PERFIL_ID, accion);
 
-        try {
-          const accion = estadoLocal === 'ACTIVA'
-            ? 'pausar'
-            : 'reanudar';
-
-          const nuevoEstado = await cambiarEstadoEnPanel(
-            PERFIL_ID,
-            accion
-          );
-
-          if (nuevoEstado === 'ACTIVA') {
-            limpiarBloqueoAlertaLocal();
-          }
-
-          guardarEstado(nuevoEstado);
-          renderBoton();
-
-          console.log(
-            'PANEL 2 ON/OFF CONFIRMADO:',
-            nuevoEstado
-          );
-        } catch (error) {
-          console.error(
-            'PANEL 2 ERROR ON/OFF:',
-            error
-          );
-
-          alert(
-            'No se pudo cambiar el estado:\n' +
-            error.message
-          );
-        } finally {
-          box.dataset.enviando = '0';
+        if (accion === 'reanudar') {
+          limpiarBloqueoAlertaLocal();
         }
+
+        guardarEstado(
+          accion === 'pausar' ? 'PAUSADA' : 'ACTIVA'
+        );
+
+        renderBoton();
       };
 
       document.body.appendChild(box);
     }
 
-    const led = document.getElementById(
-      `cq2-led-${PERFIL_ID}`
-    );
-
-    const time = document.getElementById(
-      `cq2-time-${PERFIL_ID}`
-    );
-
-    if (!led || !time) return;
+    const led = document.getElementById(`led-${PERFIL_ID}`);
+    const time = document.getElementById(`time-${PERFIL_ID}`);
 
     const activa = estadoLocal === 'ACTIVA';
 
@@ -768,7 +635,8 @@
 
     led.style.boxShadow = alertaBloqueada
       ? '0 0 8px #ff0'
-      : activa ? '0 0 8px #0f0' : '0 0 8px #f00';
+      : activa ? '0 0 8px #0f0'
+      : '0 0 8px #f00';
 
     time.textContent = alertaBloqueada
       ? 'ALRT'
@@ -778,10 +646,7 @@
   }
 
   function detectarExito() {
-    const txt = (
-      document.body?.innerText || ''
-    ).toLowerCase();
-
+    const txt = (document.body?.innerText || '').toLowerCase();
     const url = window.location.href.toLowerCase();
 
     return (
@@ -798,7 +663,7 @@
       await esperar(800);
 
       if (typeof window.html2canvas !== 'function') {
-        console.log('html2canvas no disponible');
+        console.log('html2canvas no está disponible');
         return '';
       }
 
@@ -834,6 +699,7 @@
       });
 
       return canvas.toDataURL('image/jpeg', 0.78);
+
     } catch (e) {
       console.log('No se pudo capturar pantalla:', e);
       return '';
@@ -841,14 +707,17 @@
   }
 
   async function capturarPruebaBumpCompleta() {
-    if (!detectarExito() || !document.body) return '';
-    return capturarPantallaCompleta();
+    try {
+      if (!detectarExito() || !document.body) return '';
+      return await capturarPantallaCompleta();
+    } catch (e) {
+      console.log('No se pudo capturar prueba completa:', e);
+      return '';
+    }
   }
 
   function paginaTextoLower() {
-    return String(
-      document.body?.innerText || ''
-    ).toLowerCase();
+    return String(document.body?.innerText || '').toLowerCase();
   }
 
   function hayInputPasswordVisible() {
@@ -859,7 +728,7 @@
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
       });
-    } catch {
+    } catch (e) {
       return false;
     }
   }
@@ -873,7 +742,8 @@
     const reglas = [
       {
         tipo: 'CAPTCHA',
-        motivo: 'La página solicita CAPTCHA.',
+        motivo:
+          'La página parece estar pidiendo captcha o verificación de robot.',
         patrones: [
           'captcha',
           'robot',
@@ -885,7 +755,8 @@
       },
       {
         tipo: 'VERIFICACION',
-        motivo: 'La cuenta solicita verificación.',
+        motivo:
+          'La cuenta parece estar pidiendo verificación.',
         patrones: [
           'verification required',
           'verify your account',
@@ -899,7 +770,8 @@
       },
       {
         tipo: 'BLOQUEO',
-        motivo: 'La cuenta parece bloqueada.',
+        motivo:
+          'La cuenta parece estar bloqueada, suspendida o deshabilitada.',
         patrones: [
           'account locked',
           'account suspended',
@@ -913,7 +785,8 @@
       },
       {
         tipo: 'LOGIN',
-        motivo: 'La página solicita iniciar sesión.',
+        motivo:
+          'La sesión parece cerrada o está pidiendo login otra vez.',
         patrones: [
           'login',
           'log in',
@@ -926,7 +799,8 @@
       },
       {
         tipo: 'ERROR_PUBLICACION',
-        motivo: 'La página muestra error de publicación.',
+        motivo:
+          'La página está mostrando un error de publicación.',
         patrones: [
           'error publishing',
           'unable to publish',
@@ -939,7 +813,8 @@
       },
       {
         tipo: 'POST_REMOVIDO',
-        motivo: 'La publicación parece removida.',
+        motivo:
+          'La publicación parece estar removida o rechazada.',
         patrones: [
           'post removed',
           'ad removed',
@@ -962,7 +837,8 @@
     ) {
       return {
         tipo: 'LOGIN',
-        motivo: 'Campo de contraseña visible.',
+        motivo:
+          'La página muestra un campo de contraseña/login visible.',
         detalle: url
       };
     }
@@ -1031,6 +907,13 @@
       ultima_hora: new Date().toLocaleString()
     });
 
+    console.log(
+      'MODO GUARDIA: perfil pausado por alerta',
+      tipo,
+      motivo,
+      detalle
+    );
+
     lockoutAlerta = false;
     return true;
   }
@@ -1061,9 +944,9 @@
   }
 
   function ejecutarPasoPrincipal() {
-    const btn = document.querySelector(
-      '#managePublishAd'
-    );
+    const btn = document.querySelector('#managePublishAd');
+
+    console.log('btn existe:', !!btn);
 
     if (btn) {
       localStorage.removeItem(KEY_FALLOS_BOTON);
@@ -1101,20 +984,27 @@
   function ejecutarPasoConfirmacion() {
     if (!detectarExito()) return false;
 
+    console.log('FASE 2 intentando segundo toque real');
+
     const btnMyPosts = buscarBotonMyPosts();
 
     if (btnMyPosts) {
       btnMyPosts.click();
+      console.log('Segundo toque en MY POSTS');
       return true;
     }
 
     if (window.history.length > 1) {
       try {
         window.history.back();
+        console.log('Segundo toque usando history.back()');
         return true;
-      } catch {}
+      } catch (e) {
+        console.log('Falló history.back()');
+      }
     }
 
+    console.log('No se pudo hacer segundo toque');
     return false;
   }
 
@@ -1162,9 +1052,13 @@
     }
 
     if (fase === 0) {
+      console.log('FASE 0 intentando BUMP');
+
       const ok = ejecutarPasoPrincipal();
 
       if (ok) {
+        console.log('BUMP OK pasa a 15s');
+
         localStorage.setItem(
           KEY_FASE1_INICIO,
           String(Date.now())
@@ -1176,10 +1070,10 @@
           1,
           Date.now() + DELAY_CONFIRMACION * 1000
         );
+
       } else {
-        const fallos = Number(
-          localStorage.getItem(KEY_FALLOS_BOTON) || 0
-        ) + 1;
+        const fallos =
+          Number(localStorage.getItem(KEY_FALLOS_BOTON) || 0) + 1;
 
         localStorage.setItem(
           KEY_FALLOS_BOTON,
@@ -1189,12 +1083,14 @@
         if (fallos >= MAX_FALLOS_BOTON) {
           await dispararAlerta(
             'BOTON_NO_APARECE',
-            'No aparece el botón de bump.',
-            `Fallos: ${fallos}. URL: ${window.location.href}`
+            'No aparece el botón de bump después de varios intentos.',
+            `Fallos seguidos: ${fallos}. URL: ${window.location.href}`
           );
+
           return;
         }
 
+        console.log('FALLÓ reintento 1s');
         guardarMemoria(0, Date.now() + 1000);
       }
 
@@ -1204,12 +1100,17 @@
 
     if (fase === 1) {
       if (detectarExito()) {
+        console.log(
+          `Pantalla rosada detectada esperando ${DELAY_SEGUNDO_TOQUE}s`
+        );
+
         localStorage.removeItem(KEY_FASE1_INICIO);
 
         guardarMemoria(
           2,
           Date.now() + DELAY_SEGUNDO_TOQUE * 1000
         );
+
       } else {
         const inicio = Number(
           localStorage.getItem(KEY_FASE1_INICIO) ||
@@ -1226,15 +1127,17 @@
         ) {
           await dispararAlerta(
             'NO_LLEGA_SWEET',
-            'No llegó la pantalla de éxito.',
-            `Espera: ${Math.round(
-              (Date.now() - inicio) / 1000
-            )} segundos.`
+            'Después de intentar publicar, no llegó la pantalla Sweet/éxito.',
+            `Esperó ${Math.round((Date.now() - inicio) / 1000)} segundos. URL: ${window.location.href}`
           );
+
           return;
         }
 
-        guardarMemoria(1, Date.now() + 1000);
+        guardarMemoria(
+          1,
+          Date.now() + 1000
+        );
       }
 
       renderBoton();
@@ -1245,30 +1148,37 @@
       const ok = ejecutarPasoConfirmacion();
 
       if (ok) {
+        console.log('SEGUNDO TOQUE OK vuelve a 16 min');
+
         localStorage.removeItem(KEY_FASE2_FALLOS);
 
         guardarMemoria(
           0,
           Date.now() + CICLO_MINUTOS * 60000
         );
+
       } else {
-        const fallos = Number(
-          localStorage.getItem(KEY_FASE2_FALLOS) || 0
-        ) + 1;
+        const fallosFase2 =
+          Number(localStorage.getItem(KEY_FASE2_FALLOS) || 0) + 1;
 
         localStorage.setItem(
           KEY_FASE2_FALLOS,
-          String(fallos)
+          String(fallosFase2)
         );
 
-        if (fallos >= MAX_FALLOS_FASE2) {
+        if (fallosFase2 >= MAX_FALLOS_FASE2) {
           await dispararAlerta(
             'NO_VUELVE_MY_POSTS',
-            'No pudo volver a My Posts.',
-            `Fallos: ${fallos}`
+            'La pantalla de éxito salió, pero no pudo volver a My Posts después de varios intentos.',
+            `Fallos fase 2: ${fallosFase2}. URL: ${window.location.href}`
           );
+
           return;
         }
+
+        console.log(
+          'FASE 2 no pudo hacer segundo toque, reintenta en 1s'
+        );
 
         guardarMemoria(2, Date.now() + 1000);
       }
@@ -1277,19 +1187,14 @@
     }
   }
 
-  // Evita ciclos simultáneos.
-  setInterval(async () => {
-    if (!document.body || motorOcupado) return;
-
-    motorOcupado = true;
-
+  setInterval(() => {
     try {
-      renderBoton();
-      await motor();
+      if (document.body) {
+        renderBoton();
+        motor();
+      }
     } catch (e) {
-      console.error('Error motor Panel 2:', e);
-    } finally {
-      motorOcupado = false;
+      console.log('Error:', e);
     }
   }, 1000);
 
