@@ -343,6 +343,7 @@ app.get('/manifest.webmanifest',(req,res)=>{
   );
 });
 app.locals.cq2NotificarLobo = enviarEstadoPerfil;
+app.locals.cq2ArchivoDatos = () => cq2Archivo('data.json'); // CQ2_RUTA_DATOS_UNIFICADA_V5
 require('./cq_multicliente')(app); // CQ2_MULTICLIENTE_ONOFF_V3
 require('./seguridad_admin')(app);
 require('./admin_api')(app);

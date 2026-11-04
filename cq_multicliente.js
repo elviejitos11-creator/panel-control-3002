@@ -17,7 +17,7 @@ function comparar(a, b) {
   );
 }
 
-function identificar(id, token) {
+function identificar(id, token, rutaAdmin) {
   let encontrado = null;
 
   for (const cliente of store.listar()) {
@@ -53,12 +53,7 @@ function identificar(id, token) {
   // Buscar el perfil administrativo si no pertenece
   // a ningun cliente autenticado.
   if (!encontrado) {
-    const raiz =
-      process.env.DATA_DIR ||
-      process.env.RAILWAY_VOLUME_MOUNT_PATH ||
-      __dirname;
-
-    const archivo = path.join(raiz, 'data.json');
+    const archivo = rutaAdmin;
 
     if (fs.existsSync(archivo)) {
       const datos = JSON.parse(
@@ -162,7 +157,7 @@ module.exports = function(app) {
         req.get('X-Cliente-Token') || ''
       ).trim();
 
-      const x = identificar(id, token);
+      const x = identificar(id, token, app.locals.cq2ArchivoDatos());
 
       if (!x) {
         return res.status(403).json({
