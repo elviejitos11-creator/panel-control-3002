@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  const KEY_PERFIL_GLOBAL = 'PANEL_PERFIL_ID';
+  const KEY_PERFIL_GLOBAL = 'CQ2_PERFIL_AUTORIZADO_V3';
 
   function obtenerPerfilId() {
     let id = localStorage.getItem(KEY_PERFIL_GLOBAL);
@@ -31,7 +31,7 @@
   const PERFIL_ID = obtenerPerfilId();
   if (!PERFIL_ID) return;
 
-  const KEY_TOKEN_GLOBAL = `PANEL_CLIENTE_TOKEN_${PERFIL_ID}`;
+  const KEY_TOKEN_GLOBAL = `CQ2_TOKEN_AUTORIZADO_V3_${PERFIL_ID}`;
 
   function obtenerClienteToken() {
     let token = localStorage.getItem(KEY_TOKEN_GLOBAL);
@@ -451,10 +451,7 @@
 
   async function consultarEstadoPerfil(id) {
     try {
-      const fuentes = await Promise.all([
-        consultarFuente(PANEL_LOCAL, id),
-        consultarFuente(PANEL_NUBE, id)
-      ]);
+      const fuentes = [await consultarFuente(PANEL_NUBE, id)];
 
       if (fuentes.some(
         f => f.estadoLicencia === 'TOKEN_INVALIDO'
@@ -484,16 +481,13 @@
         return 'PAUSADA';
       }
 
-      const panelActivo = fuentes.some(
-        f => f.estadoPanel === 'ACTIVA'
-      );
-
-      const licenciaActiva = fuentes.some(
-        f => f.licenciaOk === true &&
-             f.estadoLicencia === 'ACTIVA'
-      );
-
-      if (panelActivo && licenciaActiva) {
+      const autorizacion = fuentes[0];
+      if (
+        autorizacion &&
+        autorizacion.estadoPanel === 'ACTIVA' &&
+        autorizacion.licenciaOK === true &&
+        autorizacion.estadoLicencia === 'ACTIVA'
+      ) {
         guardarEstado('ACTIVA');
         return 'ACTIVA';
       }
