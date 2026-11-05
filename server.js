@@ -1284,6 +1284,77 @@ function borrarPerfil(id) {
   return guardarData(data);
 }
 
+function cq2ProgramarFechaExacta(id, accion, entrada) {
+  const texto = String(entrada || '').trim().toUpperCase();
+
+  const m = /^(HOY|MAÑANA|MANANA|(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(texto);
+
+  if (!m) {
+    throw new Error('Formato invalido. Ejemplo: HOY 8:00 PM');
+  }
+
+  const rd = new Date(Date.now() - 14400000);
+  let anio = rd.getUTCFullYear();
+  let mes = rd.getUTCMonth() + 1;
+  let dia = rd.getUTCDate();
+
+  if (m[1] === 'MAÑANA' || m[1] === 'MANANA') {
+    const d = new Date(Date.UTC(anio, mes - 1, dia + 1));
+    anio = d.getUTCFullYear();
+    mes = d.getUTCMonth() + 1;
+    dia = d.getUTCDate();
+  } else if (m[2]) {
+    dia = Number(m[2]);
+    mes = Number(m[3]);
+    if (m[4]) anio = Number(m[4]);
+  }
+
+  const hora12 = Number(m[5]);
+  const minuto = Number(m[6]);
+
+  if (hora12 < 1 || hora12 > 12 || minuto > 59) {
+    throw new Error('Hora invalida');
+  }
+
+  const hora = (hora12 % 12) + (m[7] === 'PM' ? 12 : 0);
+  const ejecutarEn = Date.UTC(
+    anio, mes - 1, dia, hora + 4, minuto
+  );
+
+  const comprobar = new Date(ejecutarEn - 14400000);
+
+  if (
+    comprobar.getUTCFullYear() !== anio ||
+    comprobar.getUTCMonth() + 1 !== mes ||
+    comprobar.getUTCDate() !== dia ||
+    comprobar.getUTCHours() !== hora ||
+    comprobar.getUTCMinutes() !== minuto
+  ) {
+    throw new Error('Fecha inexistente');
+  }
+
+  if (ejecutarEn <= Date.now()) {
+    throw new Error('La fecha debe ser futura');
+  }
+
+  const state = leerState();
+
+  if (!state || !Array.isArray(state.schedules)) {
+    throw new Error('Programaciones no disponibles');
+  }
+
+  state.schedules.push({
+    id: String(id),
+    accion: accion,
+    ejecutarEn: ejecutarEn
+  });
+
+  if (guardarState(state) === false) {
+    throw new Error('No se pudo guardar la programacion');
+  }
+
+  return ejecutarEn;
+}
 function programarAccion(id, accion, minutos = 30) {
   const state = leerState();
   state.schedules.push({
@@ -2165,11 +2236,59 @@ const cq2RenderOriginal = (req, res) => {
   html += `
     </div>
     <script>
+      let cq2ProgramacionAbierta = false;
       setInterval(() => {
-        location.reload();
+        if (!cq2ProgramacionAbierta) location.reload();
       }, 10000);
 
       async function accionPerfil(id, accion) {
+        if (accion === 'progpausa' || accion === 'progreanudar') {
+          cq2ProgramacionAbierta = true;
+
+          try {
+            const verbo = accion === 'progpausa'
+              ? 'PAUSAR' : 'REANUDAR';
+
+            const fechaHora = prompt(
+              'Escribe fecha y hora para ' + verbo +
+              ' el perfil ' + id +
+              '. Ejemplos: HOY 8:00 PM / MAÑANA 5:00 AM / 06/11 5:00 PM'
+            );
+
+            if (fechaHora === null) return;
+
+            if (!fechaHora.trim()) {
+              alert('Debes introducir fecha y hora');
+              return;
+            }
+
+            const respuesta = await fetch('/accion', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({
+                id: id,
+                accion: accion,
+                fechaHora: fechaHora.trim()
+              })
+            });
+
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok || datos.ok !== true) {
+              alert('No se pudo programar: ' +
+                (datos.error || 'Error desconocido'));
+              return;
+            }
+
+            alert('Programacion guardada correctamente');
+            location.reload();
+          } catch (error) {
+            alert('Error: ' + error.message);
+          } finally {
+            cq2ProgramacionAbierta = false;
+          }
+          return;
+        }
         if (accion === 'resetacceso') {
           const ok = confirm('¿Seguro que quieres resetear este perfil? Se borrarán fotos, datos viejos, contadores y la clave vieja dejará de funcionar.');
           if (!ok) return;
@@ -2499,11 +2618,27 @@ app.post('/accion', async (req, res) => {
       await enviarTexto(`⚠️ No se pudo borrar el perfil ${id}`);
     }
   } else if (accion === 'progpausa') {
-    programarAccion(id, 'PAUSADA', 30);
-    await enviarTexto(`⏰ Se programó una pausa para ${data[id].nombre} en 30 minutos.`);
+    try {
+      const ejecutarEn = cq2ProgramarFechaExacta(
+        id, 'PAUSADA', req.body.fechaHora
+      );
+      return res.json({ok:true, ejecutarEn});
+    } catch (error) {
+      return res.status(400).json({
+        ok:false, error:error.message
+      });
+    }
   } else if (accion === 'progreanudar') {
-    programarAccion(id, 'ACTIVA', 30);
-    await enviarTexto(`⏰ Se programó una reanudación para ${data[id].nombre} en 30 minutos.`);
+    try {
+      const ejecutarEn = cq2ProgramarFechaExacta(
+        id, 'ACTIVA', req.body.fechaHora
+      );
+      return res.json({ok:true, ejecutarEn});
+    } catch (error) {
+      return res.status(400).json({
+        ok:false, error:error.message
+      });
+    }
   } else if (accion === 'ultima') {
     await enviarUltimaActualizacion(id);
   } else if (accion === 'foto') {
