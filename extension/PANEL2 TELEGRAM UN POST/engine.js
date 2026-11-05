@@ -39,7 +39,7 @@
   const PERFIL_ID = obtenerPerfilId();
   if (!PERFIL_ID) return;
 
-  const KEY_TOKEN_GLOBAL = `CQ2_TOKEN_AUTORIZADO_V3_${PERFIL_ID}`;
+  const KEY_TOKEN_GLOBAL = `CQ2_TOKEN_AUTORIZADO_V4_${PERFIL_ID}`;
 
   function obtenerClienteToken() {
     let token = localStorage.getItem(KEY_TOKEN_GLOBAL);
