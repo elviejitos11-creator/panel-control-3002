@@ -1832,6 +1832,163 @@ async function ejecutarProgramaciones() {
 // PANEL WEB
 // =========================
 
+// CQ2_DOLPHIN_ONOFF_AUTORIZADO_V2
+// Permite el ON/OFF autorizado desde MegaPersonals.
+// Los controles administrativos conservan sus protecciones.
+
+function cq2OrigenDolphin(req, res) {
+  const origen = String(req.get('origin') || '');
+
+  if (!origen) return false;
+
+  let url;
+
+  try {
+    url = new URL(origen);
+  } catch {
+    return false;
+  }
+
+  const host = url.hostname.toLowerCase();
+
+  const permitido =
+    url.protocol === 'https:' &&
+    (
+      host === 'megapersonals.eu' ||
+      host.endsWith('.megapersonals.eu')
+    );
+
+  if (!permitido) return false;
+
+  res.set('Access-Control-Allow-Origin', origen);
+  res.vary('Origin');
+
+  res.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, X-Cliente-Token'
+  );
+
+  res.set(
+    'Access-Control-Allow-Methods',
+    'POST, OPTIONS'
+  );
+
+  return true;
+}
+
+app.options('/accion', (req, res, next) => {
+  if (!cq2OrigenDolphin(req, res)) {
+    return next();
+  }
+
+  return res.sendStatus(204);
+});
+
+app.post('/accion', (req, res, next) => {
+  // Solo se atienden aquí las solicitudes de MegaPersonals.
+  // Los botones del panel siguen su ruta administrativa.
+  if (!cq2OrigenDolphin(req, res)) {
+    return next();
+  }
+
+  const id = String(req.body?.id || '').trim();
+
+  const accion = String(
+    req.body?.accion || ''
+  ).trim().toLowerCase();
+
+  if (!/^[A-Za-z0-9_-]{1,50}$/.test(id)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'ID_INVALIDO'
+    });
+  }
+
+  if (!['pausar', 'reanudar'].includes(accion)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'ACCION_INVALIDA'
+    });
+  }
+
+  const data = leerData();
+  const perfil = Object.prototype.hasOwnProperty.call(
+    data,
+    id
+  ) ? data[id] : null;
+
+  if (!perfil) {
+    return res.status(404).json({
+      ok: false,
+      estado: 'NO_EXISTE',
+      error: 'PERFIL_NO_EXISTE'
+    });
+  }
+
+  // Usa la validacion original del Panel 2:
+  // token individual o clave general configurada.
+  // No permite acceso sin una credencial valida.
+  if (!tokenValidoParaPerfil(req, perfil)) {
+    return res.status(403).json({
+      ok: false,
+      estado: 'TOKEN_INVALIDO',
+      error: 'TOKEN_INVALIDO'
+    });
+  }
+
+  if (
+    accion === 'reanudar' &&
+    planVencido(perfil)
+  ) {
+    return res.status(403).json({
+      ok: false,
+      estado: 'VENCIDA',
+      error: 'LICENCIA_VENCIDA'
+    });
+  }
+
+  const estado = accion === 'pausar'
+    ? 'PAUSADA'
+    : 'ACTIVA';
+
+  try {
+    const guardado = cambiarEstadoPerfil(
+      id,
+      estado
+    );
+
+    if (!guardado) {
+      return res.status(500).json({
+        ok: false,
+        error: 'NO_SE_PUDO_GUARDAR'
+      });
+    }
+
+    const confirmado = leerData()[id];
+
+    if (!confirmado || confirmado.estado !== estado) {
+      return res.status(500).json({
+        ok: false,
+        error: 'ESTADO_NO_CONFIRMADO'
+      });
+    }
+
+    return res.json({
+      ok: true,
+      id,
+      estado
+    });
+  } catch (error) {
+    console.error('CQ2 Dolphin ONOFF:', error);
+
+    return res.status(500).json({
+      ok: false,
+      error: 'ERROR_INTERNO'
+    });
+  }
+});
+
+// FIN CQ2_DOLPHIN_ONOFF_AUTORIZADO_V2
 // CQ2_RUTAS_ADMIN_PROTEGIDAS_V1
 
 // El panel original pertenece exclusivamente al administrador.
