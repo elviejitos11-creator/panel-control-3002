@@ -1,28 +1,3 @@
-// CQ2_REACTIVACION_OBLIGATORIA_V1
-// Una unica reactivacion para esta version de seguridad.
-const cq2PrepararLicencia = (async () => {
-  const marca = "CQ2_REACTIVACION_OBLIGATORIA_V1";
-
-  const actual = await chrome.storage.local.get(marca);
-
-  if (actual[marca] === true) return;
-
-  await chrome.storage.local.set({
-    loboActivo: false
-  });
-
-  await chrome.storage.local.remove([
-    "cqNormal1Clave",
-    "cqNormal1Dispositivo",
-    "cqCliente"
-  ]);
-
-  await chrome.storage.local.set({
-    [marca]: true
-  });
-
-  console.log("CQ CONTROL: reactivacion de licencia requerida");
-})();
 chrome.runtime.onMessage.addListener((mensaje, sender) => {
   if (mensaje?.tipo !== "LOBO_CARGAR_MOTOR") {
     return;
@@ -58,7 +33,7 @@ chrome.runtime.onMessage.addListener((mensaje, sender) => {
     }
 
     const consulta = await fetch(
-      "https://cqcontrollicencias-production.up.railway.app/api/licencias/verificar-instalacion",
+      "https://cqcontrollicencias-production.up.railway.app/api/licencias/verificar",
       {
         method: "POST",
         headers: {"Content-Type":"application/json"},
@@ -105,7 +80,7 @@ chrome.runtime.onMessage.addListener((mensaje,remitente,responder)=>{
  (async()=>{
   try{
    const activar=mensaje.tipo==="CQ_ACTIVAR_PANEL3_1";
-   await cq2PrepararLicencia;
+
    const actual=await chrome.storage.local.get([
     "cqNormal1Clave","cqNormal1Dispositivo"
    ]);
@@ -124,7 +99,7 @@ chrome.runtime.onMessage.addListener((mensaje,remitente,responder)=>{
 
    const ruta=activar
     ?"/api/licencias/activar-instalacion"
-    :"/api/licencias/verificar-instalacion";
+    :"/api/licencias/verificar";
 
    const r=await fetch("https://cqcontrollicencias-production.up.railway.app"+ruta,{
     method:"POST",
