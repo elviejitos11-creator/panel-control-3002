@@ -509,28 +509,78 @@
     }
   }
 
+  // CQ2_ONOFF_TOKEN_NUBE_V1
   async function cambiarEstadoEnPanel(id, accion) {
-    const payload = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ id, accion }),
-      cache: 'no-store'
-    };
+    const token = String(CLIENTE_TOKEN || '').trim();
 
-    for (const [base, nombre] of [
-      [PANEL_LOCAL, 'local'],
-      [PANEL_NUBE, 'nube']
-    ]) {
+    if (!token) {
+      console.error('CQ2: falta token de acceso');
+      alert('Falta la clave de acceso del perfil.');
+      return false;
+    }
+
+    try {
+      const respuesta = await fetch(
+        `${PANEL_NUBE}/accion`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Cliente-Token': token
+          },
+          body: JSON.stringify({
+            id: String(id),
+            accion: String(accion),
+            token
+          }),
+          cache: 'no-store'
+        }
+      );
+
+      let resultado = {};
+
       try {
-        await fetch(`${base}/accion`, payload);
-      } catch (e) {
-        console.log(
-          `No se pudo cambiar estado en panel ${nombre}:`,
-          e
+        resultado = await respuesta.json();
+      } catch (_) {}
+
+      if (!respuesta.ok || resultado.ok !== true) {
+        const motivo =
+          resultado.error ||
+          resultado.motivo ||
+          resultado.estado ||
+          `HTTP ${respuesta.status}`;
+
+        console.error(
+          'CQ2: orden rechazada por Railway:',
+          respuesta.status,
+          motivo
         );
+
+        alert(
+          `Panel 2 no acepto la orden: ${motivo}`
+        );
+
+        return false;
       }
+
+      console.log(
+        'CQ2: orden confirmada por Railway:',
+        resultado.estado
+      );
+
+      return true;
+
+    } catch (error) {
+      console.error(
+        'CQ2: error de comunicacion con Railway:',
+        error
+      );
+
+      alert(
+        'No se pudo conectar con el Panel 2.'
+      );
+
+      return false;
     }
   }
 
