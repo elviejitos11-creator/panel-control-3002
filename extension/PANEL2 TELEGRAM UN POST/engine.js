@@ -519,6 +519,7 @@
 
   // CQ2_ONOFF_TOKEN_NUBE_V1
   async function cambiarEstadoEnPanel(id, accion) {
+    if (!cqPermisoMotor()) throw new Error('Licencia no autorizada');
     const token = String(CLIENTE_TOKEN || '').trim();
 
     if (!token) {
@@ -676,7 +677,7 @@
     const led = document.getElementById(`led-${PERFIL_ID}`);
     const time = document.getElementById(`time-${PERFIL_ID}`);
 
-    const activa = estadoLocal === 'ACTIVA';
+    const activa = estadoLocal === 'ACTIVA' && cqPermisoMotor();
 
     const alertaBloqueada =
       localStorage.getItem(KEY_ALERTA_BLOQUEADA) === '1';
@@ -996,6 +997,7 @@
   }
 
   function ejecutarPasoPrincipal() {
+    if (!cqPermisoMotor()) return false;
     const btn = document.querySelector('#managePublishAd');
 
     console.log('btn existe:', !!btn);
@@ -1034,6 +1036,7 @@
   }
 
   function ejecutarPasoConfirmacion() {
+    if (!cqPermisoMotor()) return false;
     if (!detectarExito()) return false;
 
     console.log('FASE 2 intentando segundo toque real');
@@ -1061,6 +1064,7 @@
   }
 
   async function motor() {
+    if (!cqPermisoMotor()) return;
     const guardia = await evaluarModoGuardia();
     if (guardia) return;
 
@@ -1237,6 +1241,30 @@
 
       renderBoton();
     }
+  }
+
+  // CQ2_LICENCIA_OBLIGATORIA_MOTOR_V1
+  let cqLicenciaActiva = false;
+  let cqLicenciaUltima = 0;
+
+  window.addEventListener('message', evento => {
+    if (
+      evento.source !== window ||
+      evento.data?.tipo !== 'CQ2_LICENCIA_ESTADO_V1'
+    ) return;
+
+    cqLicenciaActiva = evento.data.autorizada === true;
+    cqLicenciaUltima = Date.now();
+
+    if (!cqLicenciaActiva) {
+      guardarEstado('PAUSADA');
+      renderBoton();
+    }
+  });
+
+  function cqPermisoMotor() {
+    return cqLicenciaActiva === true &&
+      Date.now() - cqLicenciaUltima < 12000;
   }
 
   setInterval(() => {

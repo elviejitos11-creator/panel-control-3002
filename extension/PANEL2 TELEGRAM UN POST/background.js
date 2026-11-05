@@ -20,6 +20,40 @@ chrome.runtime.onMessage.addListener((mensaje, sender) => {
 
     if (!estado.loboActivo) return;
 
+    // CQ2_LICENCIA_OBLIGATORIA_MOTOR_V1
+    const datosLicencia = await chrome.storage.local.get([
+      "cqNormal1Clave",
+      "cqNormal1Dispositivo"
+    ]);
+
+    if (!datosLicencia.cqNormal1Clave ||
+        !datosLicencia.cqNormal1Dispositivo) {
+      console.warn("LOBO PRO: falta licencia");
+      return;
+    }
+
+    const consulta = await fetch(
+      "https://cqcontrollicencias-production.up.railway.app/api/licencias/verificar-instalacion",
+      {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          clave: datosLicencia.cqNormal1Clave,
+          dispositivo: datosLicencia.cqNormal1Dispositivo,
+          producto: "PANENEL2_TELEGRAM_UN_POST"
+        })
+      }
+    );
+
+    if (!consulta.ok) return;
+
+    const licencia = await consulta.json();
+
+    if (licencia.autorizada !== true) {
+      console.warn("LOBO PRO: licencia rechazada");
+      return;
+    }
+
     await chrome.scripting.executeScript({
       target: {
         tabId: sender.tab.id,
