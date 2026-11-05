@@ -102,6 +102,35 @@ require('./cliente_api')(app, {
 });
 
 // Primero el acceso; despues la administracion.
+// CQ2_CORS_ORIGINAL_V2
+// Comunicacion del motor con el servidor original.
+app.use((req, res, next) => {
+  const ruta = req.path || '';
+
+  if (
+    ruta !== '/accion' &&
+    !/^\/api\/(?:estado|licencia)\/[^/]+\/?$/.test(ruta)
+  ) {
+    return next();
+  }
+
+  const origen = String(req.get('origin') || '');
+
+  if (!/^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i.test(origen)) {
+    return next();
+  }
+
+  res.set('Access-Control-Allow-Origin', origen);
+  res.vary('Origin');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, X-Cliente-Token');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 // CQ2_ONOFF_ANTES_BLOQUEOS_V1
 /* CQ2_EXTENSION_ONOFF_AUTORIZADO_V1
    Ruta exclusiva para encendido y apagado desde la extension.
