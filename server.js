@@ -102,6 +102,80 @@ require('./cliente_api')(app, {
 });
 
 // Primero el acceso; despues la administracion.
+// CQ2_ONOFF_ANTES_BLOQUEOS_V1
+/* CQ2_EXTENSION_ONOFF_AUTORIZADO_V1
+   Ruta exclusiva para encendido y apagado desde la extension.
+   El panel web conserva su ruta /accion original.
+*/
+app.post('/accion', (req, res, next) => {
+  const origen = String(req.get('origin') || '');
+
+  if (!/^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i.test(origen)) {
+    return next();
+  }
+
+  const id = String(req.body?.id || '').trim();
+  const accion = String(req.body?.accion || '').trim().toLowerCase();
+
+  if (!id || !['pausar', 'reanudar'].includes(accion)) {
+    return res.status(400).json({
+      ok: false,
+      error: 'ORDEN_INVALIDA'
+    });
+  }
+
+  try {
+    const data = leerData();
+    const perfil = Object.prototype.hasOwnProperty.call(data, id)
+      ? data[id] : null;
+
+    if (!perfil) {
+      return res.status(404).json({
+        ok: false,
+        error: 'PERFIL_NO_ENCONTRADO'
+      });
+    }
+
+    if (!tokenValidoParaPerfil(req, perfil)) {
+      return res.status(403).json({
+        ok: false,
+        error: 'TOKEN_INVALIDO'
+      });
+    }
+
+    const estado = accion === 'reanudar' ? 'ACTIVA' : 'PAUSADA';
+    const guardado = cambiarEstadoPerfil(id, estado);
+
+    if (!guardado) {
+      return res.status(500).json({
+        ok: false,
+        error: 'NO_SE_PUDO_GUARDAR'
+      });
+    }
+
+    const comprobacion = leerData();
+
+    if (comprobacion[id]?.estado !== estado) {
+      return res.status(500).json({
+        ok: false,
+        error: 'ESTADO_NO_CONFIRMADO'
+      });
+    }
+
+    return res.json({
+      ok: true,
+      id,
+      estado
+    });
+  } catch (error) {
+    console.error('[CQ2 ONOFF]', error);
+    return res.status(500).json({
+      ok: false,
+      error: 'ERROR_INTERNO'
+    });
+  }
+});
+
 // CQ2_BLOQUEO_CRUCE_CLIENTES_V1
 // Una sesion de cliente nunca debe escribir en el panel principal.
 // Las rutas /cliente conservan su almacenamiento privado.
@@ -196,78 +270,6 @@ app.get('/manifest.webmanifest',(req,res)=>{
   res.type('application/manifest+json').sendFile(
     path.join(__dirname,'public','manifest.webmanifest')
   );
-});
-/* CQ2_EXTENSION_ONOFF_AUTORIZADO_V1
-   Ruta exclusiva para encendido y apagado desde la extension.
-   El panel web conserva su ruta /accion original.
-*/
-app.post('/accion', (req, res, next) => {
-  const origen = String(req.get('origin') || '');
-
-  if (!/^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i.test(origen)) {
-    return next();
-  }
-
-  const id = String(req.body?.id || '').trim();
-  const accion = String(req.body?.accion || '').trim().toLowerCase();
-
-  if (!id || !['pausar', 'reanudar'].includes(accion)) {
-    return res.status(400).json({
-      ok: false,
-      error: 'ORDEN_INVALIDA'
-    });
-  }
-
-  try {
-    const data = leerData();
-    const perfil = Object.prototype.hasOwnProperty.call(data, id)
-      ? data[id] : null;
-
-    if (!perfil) {
-      return res.status(404).json({
-        ok: false,
-        error: 'PERFIL_NO_ENCONTRADO'
-      });
-    }
-
-    if (!tokenValidoParaPerfil(req, perfil)) {
-      return res.status(403).json({
-        ok: false,
-        error: 'TOKEN_INVALIDO'
-      });
-    }
-
-    const estado = accion === 'reanudar' ? 'ACTIVA' : 'PAUSADA';
-    const guardado = cambiarEstadoPerfil(id, estado);
-
-    if (!guardado) {
-      return res.status(500).json({
-        ok: false,
-        error: 'NO_SE_PUDO_GUARDAR'
-      });
-    }
-
-    const comprobacion = leerData();
-
-    if (comprobacion[id]?.estado !== estado) {
-      return res.status(500).json({
-        ok: false,
-        error: 'ESTADO_NO_CONFIRMADO'
-      });
-    }
-
-    return res.json({
-      ok: true,
-      id,
-      estado
-    });
-  } catch (error) {
-    console.error('[CQ2 ONOFF]', error);
-    return res.status(500).json({
-      ok: false,
-      error: 'ERROR_INTERNO'
-    });
-  }
 });
 require('./seguridad_admin')(app);
 require('./admin_api')(app);
