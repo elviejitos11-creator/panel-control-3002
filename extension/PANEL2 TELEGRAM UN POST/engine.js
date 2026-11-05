@@ -594,6 +594,19 @@
   }
 
   function renderBoton() {
+    // CQ2_OCULTAR_LOBO_SIN_LICENCIA_V1
+    // Sin autorizacion no se crea ni permanece el boton.
+    if (!cqPermisoMotor()) {
+      const botonAnterior = document.getElementById(
+        `motor-panel-${PERFIL_ID}`
+      );
+
+      if (botonAnterior) {
+        botonAnterior.remove();
+      }
+
+      return;
+    }
     const idUI = `motor-panel-${PERFIL_ID}`;
 
     const faltan = Math.max(
