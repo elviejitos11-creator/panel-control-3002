@@ -7,6 +7,14 @@
 
 (function () {
   'use strict';
+  // CQ2 MOTOR UNICO: evita inicializaciones simultaneas.
+  if (window.__CQ2_ENGINE_UNICO_V1__) {
+    console.warn('CQ2: motor ya iniciado; duplicado bloqueado');
+    return;
+  }
+
+  window.__CQ2_ENGINE_UNICO_V1__ = true;
+
 
   const KEY_PERFIL_GLOBAL = 'CQ2_PERFIL_AUTORIZADO_V3';
 
