@@ -191,18 +191,6 @@ app.post('/accion', (req, res, next) => {
       });
     }
 
-    // CQ2_NOTIFICACIONES_SCRIPT_V1
-    setImmediate(() => {
-      Promise.resolve()
-        .then(() => enviarEstadoPerfil(id))
-        .catch(error => {
-          console.error(
-            '[CQ2 TELEGRAM ONOFF]',
-            error.message
-          );
-        });
-    });
-
     return res.json({
       ok: true,
       id,
@@ -1599,29 +1587,6 @@ app.get('/api/estado/:id', (req, res) => {
   }
 });
 
-/* CQ2_CORS_EVENTOS_TELEGRAM_V1 */
-app.use(['/registrar-evento', '/registrar-alerta'], (req, res, next) => {
-  const origen = String(req.get('origin') || '');
-
-  if (/^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i.test(origen)) {
-    res.setHeader('Access-Control-Allow-Origin', origen);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, X-Cliente-Token'
-    );
-    res.setHeader(
-      'Access-Control-Allow-Methods',
-      'POST, OPTIONS'
-    );
-
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(204);
-    }
-  }
-
-  next();
-});
 app.post('/registrar-evento', async (req, res) => {
   const {
     id,
