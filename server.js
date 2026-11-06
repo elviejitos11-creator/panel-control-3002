@@ -191,6 +191,9 @@ app.post('/accion', (req, res, next) => {
       });
     }
 
+    Promise.resolve()
+      .then(() => enviarEstadoPerfil(id))
+      .catch(error => console.error('[CQ2 TELEGRAM ONOFF]', error));
     return res.json({
       ok: true,
       id,
