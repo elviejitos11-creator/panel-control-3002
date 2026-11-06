@@ -173,6 +173,19 @@ app.post('/accion', (req, res, next) => {
     }
 
     const estado = accion === 'reanudar' ? 'ACTIVA' : 'PAUSADA';
+
+    // CQ2_SYNC_SCREEN_TELEGRAM_V1
+    // No permitir reanudar un plan vencido.
+    if (accion === 'reanudar' && planVencido(perfil)) {
+      console.warn('[CQ2 SCREEN ONOFF] PLAN_VENCIDO', id);
+      return res.status(403).json({
+        ok: false,
+        error: 'PLAN_VENCIDO'
+      });
+    }
+
+    const estadoAnterior = perfil.estado;
+    console.log('[CQ2 SCREEN ONOFF] ORDEN', id, accion);
     const guardado = cambiarEstadoPerfil(id, estado);
 
     if (!guardado) {
@@ -194,6 +207,16 @@ app.post('/accion', (req, res, next) => {
     Promise.resolve()
       .then(() => enviarEstadoPerfil(id))
       .catch(error => console.error('[CQ2 TELEGRAM ONOFF]', error));
+    console.log('[CQ2 SCREEN ONOFF] CONFIRMADO', id, estado);
+
+    if (estadoAnterior !== estado) {
+      Promise.resolve()
+        .then(() => enviarEstadoPerfil(id))
+        .catch(error => {
+          console.error('[CQ2 SCREEN TELEGRAM]', error);
+        });
+    }
+
     return res.json({
       ok: true,
       id,
