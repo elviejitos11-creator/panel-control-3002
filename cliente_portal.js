@@ -352,11 +352,19 @@ module.exports = function(app) {
         }
       }
 
-      const layer = app.router.stack.find(l =>
+      const rutas = app.router.stack.filter(l =>
         l.route &&
         l.route.path === original &&
         l.route.methods[metodo]
       );
+
+      // CQ2_RESET_CLIENTE_RUTA_PRINCIPAL_V1
+      // Solo resetacceso usa el manejador principal.
+      const layer =
+        original === '/accion' &&
+        String(req.body?.accion || '') === 'resetacceso'
+          ? rutas[rutas.length - 1]
+          : rutas[0];
 
       if (!layer) {
         return res.status(500).send(
