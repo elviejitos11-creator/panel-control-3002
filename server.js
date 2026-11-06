@@ -1764,16 +1764,36 @@ async function procesarCallback(q) {
   }
 
   if (accion === 'progpausa') {
-    programarAccion(id, 'PAUSADA', 30);
-    await responderCallback(callbackId, 'Pausa programada');
-    await enviarTexto(`⏰ Se programó una pausa para el perfil ${id} en 30 minutos.`, chatId);
+    const s = leerState();
+    s.cq2EsperandoHora = s.cq2EsperandoHora || {};
+    s.cq2EsperandoHora[String(chatId)] = {
+      id: String(id), accion: 'PAUSADA', ts: Date.now()
+    };
+    if (!guardarState(s)) {
+      await responderCallback(callbackId, 'Error guardando');
+      return;
+    }
+    await responderCallback(callbackId, 'Indica fecha y hora');
+    await enviarTexto('Programar perfil ' + id +
+      '\nEscribe HOY 8:00 PM, MAÑANA 5:00 AM o 06/11 5:00 PM.' +
+      '\nCANCELAR para salir.', chatId);
     return;
   }
 
   if (accion === 'progreanudar') {
-    programarAccion(id, 'ACTIVA', 30);
-    await responderCallback(callbackId, 'Reanudación programada');
-    await enviarTexto(`⏰ Se programó una reanudación para el perfil ${id} en 30 minutos.`, chatId);
+    const s = leerState();
+    s.cq2EsperandoHora = s.cq2EsperandoHora || {};
+    s.cq2EsperandoHora[String(chatId)] = {
+      id: String(id), accion: 'ACTIVA', ts: Date.now()
+    };
+    if (!guardarState(s)) {
+      await responderCallback(callbackId, 'Error guardando');
+      return;
+    }
+    await responderCallback(callbackId, 'Indica fecha y hora');
+    await enviarTexto('Programar perfil ' + id +
+      '\nEscribe HOY 8:00 PM, MAÑANA 5:00 AM o 06/11 5:00 PM.' +
+      '\nCANCELAR para salir.', chatId);
     return;
   }
 
@@ -1829,6 +1849,7 @@ async function revisarTelegram() {
 
       if (u.callback_query) {
         await procesarCallback(u.callback_query);
+        Object.assign(state, leerState());
       }
 
       if (u.message) {
@@ -1837,6 +1858,38 @@ async function revisarTelegram() {
 
         if (msg.text) {
           const texto = msg.text.trim().toUpperCase();
+          // CQ2_TELEGRAM_FECHA_SEGURA_V1
+          const pendiente = leerState().cq2EsperandoHora?.[String(chatId)];
+          if (pendiente) {
+            if (texto === 'CANCELAR') {
+              const s = leerState();
+              delete s.cq2EsperandoHora[String(chatId)];
+              guardarState(s);
+              await enviarTexto('Programacion cancelada.', chatId);
+              continue;
+            }
+            try {
+              const ts = cq2ProgramarFechaExacta(
+                pendiente.id, pendiente.accion, msg.text.trim()
+              );
+              const s = leerState();
+              delete s.cq2EsperandoHora[String(chatId)];
+              guardarState(s);
+              await enviarTexto(
+                'Programacion guardada. Perfil: ' + pendiente.id +
+                '\nAccion: ' + pendiente.accion +
+                '\nHora RD: ' + new Date(ts).toLocaleString(
+                  'es-DO', {timeZone:'America/Santo_Domingo'}
+                ), chatId
+              );
+            } catch (e) {
+              await enviarTexto(
+                'Hora incorrecta: ' + e.message +
+                '\nIntenta otra vez o escribe CANCELAR.', chatId
+              );
+            }
+            continue;
+          }
 
           if (/^P\d+$/.test(texto)) {
             const id = texto.replace('P', '');
@@ -1888,7 +1941,9 @@ async function revisarTelegram() {
       }
     }
 
-    guardarState(state);
+    const fresco = leerState();
+    fresco.offset = state.offset;
+    guardarState(fresco);
   } catch (error) {
     console.log('Error en revisarTelegram:', error?.message || error);
   } finally {
