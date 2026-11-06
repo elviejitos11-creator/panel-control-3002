@@ -49,7 +49,7 @@ app.locals.cq2PerfilesCliente = cliente => {
 // CQ2_CORS_PREFLIGHT_FIX_V1
 // Permitir solamente el preflight de MegaPersonals.
 // El POST conserva sus controles de autenticacion.
-app.use('/accion', (req, res, next) => {
+app.use(['/accion', '/registrar-evento', '/registrar-alerta'], (req, res, next) => {
   const origen = String(req.headers.origin || '');
 
   const permitido =
