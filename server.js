@@ -2224,6 +2224,71 @@ app.use((req, res, next) => {
 });
 
 // FIN CQ2_RUTAS_ADMIN_PROTEGIDAS_V1
+    // CQ2_AGENDA_VISIBLE_V2
+    // Presentacion solamente: no modifica programaciones.
+    function cq2AgendaPendienteHtml(data) {
+      const state = leerState();
+      const items = Array.isArray(state.schedules)
+        ? state.schedules.filter(x =>
+            x &&
+            Number.isFinite(Number(x.ejecutarEn)) &&
+            Number(x.ejecutarEn) > Date.now()
+          ).sort((a,b) =>
+            Number(a.ejecutarEn) - Number(b.ejecutarEn))
+        : [];
+
+      if (!items.length) return '';
+
+      const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;', '<':'&lt;', '>':'&gt;',
+        '"':'&quot;', "'":'&#39;'
+      })[c]);
+
+      const tarjetas = items.map(x => {
+        const id = String(x.id || '');
+        const accion = String(x.accion || '').toLowerCase();
+        const pausa = accion.includes('paus');
+        const titulo = pausa ? '⏸ PAUSAR' : '▶️ REANUDAR';
+        const global = /^(todas|todos|all)$/i.test(id);
+        const destino = global
+          ? 'Todos los perfiles'
+          : 'Perfil: ' + id;
+        const chat = global
+          ? 'Grupo'
+          : (data[id]?.chat_id || 'N/A');
+
+        const ts = Number(x.ejecutarEn);
+        const fecha = new Date(ts).toLocaleString('es-DO', {
+          timeZone:'America/Santo_Domingo',
+          day:'2-digit', month:'2-digit', year:'numeric',
+          hour:'2-digit', minute:'2-digit', hour12:true
+        });
+
+        return '<div style="background:#1b3c5c;padding:12px;' +
+          'border-radius:9px;margin-top:8px;line-height:1.5">' +
+          '<strong>' + titulo + '</strong>' +
+          '<div>' + esc(destino) + '</div>' +
+          '<div>Chat ID: ' + esc(chat) + '</div>' +
+          '<div>Se ejecuta: ' + esc(fecha) + '</div>' +
+          '<div>Falta: <strong data-cq2-agenda="' +
+          ts + '">Calculando...</strong></div></div>';
+      }).join('');
+
+      const reloj = '<script>' +
+        '(function(){function actualizar(){' +
+        'document.querySelectorAll("[data-cq2-agenda]").forEach(function(el){' +
+        'var n=Math.max(0,Math.ceil((Number(el.getAttribute("data-cq2-agenda"))-Date.now())/1000));' +
+        'var d=Math.floor(n/86400),h=Math.floor(n%86400/3600);' +
+        'var m=Math.floor(n%3600/60),s=n%60;' +
+        'el.textContent=(d?d+"d ":"")+(d||h?h+"h ":"")+m+"m "+s+"s";' +
+        '});}actualizar();setInterval(actualizar,1000);})();' +
+        '</script>';
+
+      return '<section style="background:#102840;border:1px solid #477eaf;' +
+        'border-radius:12px;padding:12px;margin-bottom:16px">' +
+        '<h3 style="margin:0 0 8px">⏰ Programaciones pendientes</h3>' +
+        tarjetas + '</section>' + reloj;
+    }
 const cq2RenderOriginal = (req, res) => {
   const data = req.cliente
     ? JSON.parse(fs.readFileSync(
@@ -2232,6 +2297,7 @@ const cq2RenderOriginal = (req, res) => {
           'data.json'
         ), 'utf8'))
     : leerData();
+  const cq2Agenda = req.cliente ? '' : cq2AgendaPendienteHtml(data);
   let html = `
   <html>
   <head>
@@ -2269,6 +2335,7 @@ const cq2RenderOriginal = (req, res) => {
       <a class="btn warning" href="/nuevo">➕ Nuevo perfil</a>
        <a class="btn" href="/administracion" style="background:#7c3aed;color:white;">⚙️ Administración de clientes</a>
     </div>
+    ${cq2Agenda}
     <div class="grid">
   `;
 
