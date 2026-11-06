@@ -1135,13 +1135,6 @@ async function enviarBufferComoFoto(buffer, caption, id, filename = 'ultimo_bump
   const res = await apiTelegramForm('sendPhoto', form);
 
   if (res && res.ok) return true;
-
-  await apiTelegram('sendMessage', {
-    chat_id: destino,
-    text: caption,
-    reply_markup: tecladoTelegram(id)
-  });
-
   return false;
 }
 
@@ -1850,6 +1843,7 @@ async function revisarTelegram() {
       if (u.callback_query) {
         await procesarCallback(u.callback_query);
         Object.assign(state, leerState());
+        state.offset = u.update_id;
       }
 
       if (u.message) {
