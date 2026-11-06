@@ -1136,12 +1136,6 @@ async function enviarBufferComoFoto(buffer, caption, id, filename = 'ultimo_bump
 
   if (res && res.ok) return true;
 
-  await apiTelegram('sendMessage', {
-    chat_id: destino,
-    text: caption,
-    reply_markup: tecladoTelegram(id)
-  });
-
   return false;
 }
 
@@ -1677,7 +1671,18 @@ app.post('/registrar-evento', async (req, res) => {
 
   if (tipoNormal === 'publicado') {
     if (puedeContarBump(perfil)) {
+      // Evitar repetir avisos por reintentos inmediatos del mismo bump.
+      const hace = Date.now() - Number(perfil.cq2UltimoBumpTs || 0);
+      if (hace >= 0 && hace < 60000) {
+        return res.json({
+          ok: true,
+          tipo: tipoNormal,
+          bump_contado: false,
+          duplicado: true
+        });
+      }
       contarBump = true;
+      perfil.cq2UltimoBumpTs = Date.now();
 
       resetBumpSiCambioDia(perfil);
       perfil.bump_hoy = (perfil.bump_hoy || 0) + 1;
