@@ -2481,7 +2481,7 @@ const cq2RenderOriginal = (req, res) => {
 
       html = html.replace(
         /href="\/editar\/([^"]+)"/g,
-        'href="/cliente/editar/$1"'
+        'href="/cliente/editar?id=$1"'
       );
 
       html = html.replace(
