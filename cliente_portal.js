@@ -237,6 +237,118 @@ module.exports = function(app) {
   });
 
   app.use('/cliente',exigirSesion);
+  // CQ2_REPARACION_DIRECTA_V5
+  // Solo editar y generar clave del cliente autenticado.
+  app.use('/cliente', (req,res,next) => {
+    const ruta = req.path;
+    const metodo = req.method;
+
+    const editar = metodo === 'GET' &&
+      (/^\/editar(?:-perfil)?\/[A-Za-z0-9_-]{1,40}$/.test(ruta) ||
+       ruta === '/editar');
+
+    const clave = metodo === 'POST' &&
+      ruta === '/clave-perfil';
+
+    if (!editar && !clave) return next();
+
+    res.setHeader('Cache-Control','no-store');
+
+    try {
+      if (!req.cliente || !req.cliente.id) {
+        return res.sendStatus(403);
+      }
+
+      const id = editar
+        ? String(ruta === '/editar'
+            ? (req.query.id || '')
+            : ruta.split('/').pop())
+        : String((req.body && req.body.id) || '');
+
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+        return res.status(400).send('ID invalido');
+      }
+
+      const datos = leerPerfiles(req.cliente.id);
+
+      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
+        return res.status(404).send('Perfil no encontrado');
+      }
+
+      if (clave) {
+        const sesion = sesiones.get(cookie(req));
+
+        if (!sesion || !req.body ||
+            req.body._csrf !== sesion.csrf) {
+          return res.sendStatus(403);
+        }
+
+        const archivo = archivoCliente(req.cliente.id);
+        fs.copyFileSync(
+          archivo,
+          archivo + '.before-key-' + Date.now() + '.bak'
+        );
+
+        const nueva = require('crypto')
+          .randomBytes(24).toString('hex');
+
+        datos[id].cliente_token = nueva;
+        guardarPerfiles(req.cliente.id,datos);
+
+        return res.status(200).json({
+          ok:true,
+          perfil:id,
+          clave:nueva
+        });
+      }
+
+      const p = datos[id];
+      const esc = v => String(v == null ? '' : v)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+
+      const campo = (titulo,nombre,valor) =>
+        '<label style="display:block;margin:12px 0">' +
+        '<b>' + esc(titulo) + '</b>' +
+        '<input name="' + esc(nombre) + '" value="' +
+        esc(valor) + '" style="width:100%" /></label>';
+
+      const html =
+        '<div class="card">' +
+        '<h2>Editar perfil ' + esc(id) + '</h2>' +
+        '<form method="POST" action="/cliente/guardar-edicion">' +
+        campoCsrf(req) +
+        '<input type="hidden" name="id" value="' +
+        esc(id) + '">' +
+        campo('Nombre','nombre',p.nombre) +
+        campo('Chat ID','chat_id',p.chat_id) +
+        campo('Telefono','telefono',p.telefono) +
+        campo('Codigo','codigo',p.codigo) +
+        campo('Ubicacion','ubicacion',p.ubicacion) +
+        '<label><b>Texto</b>' +
+        '<textarea name="texto" rows="6" ' +
+        'style="width:100%">' +
+        esc(p.texto) + '</textarea></label>' +
+        '<p>Token, fotos y contadores se conservan.</p>' +
+        '<button type="submit">Guardar cambios</button>' +
+        '<a class="btn" href="/cliente">Volver</a>' +
+        '</form></div>';
+
+      return res.status(200).send(
+        pagina('Editar perfil',html)
+      );
+
+    } catch(e) {
+      console.error('[CQ2 DIRECTO V5]',e.message);
+      return res.status(500).send(
+        'Error procesando perfil del cliente'
+      );
+    }
+  });
+
   // CQ2_EDITAR_DIRECTO_V4
   app.get('/cliente/editar-perfil/:id', (req,res) => {
     try {
