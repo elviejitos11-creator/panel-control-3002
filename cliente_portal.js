@@ -288,6 +288,10 @@ module.exports = function(app) {
                /^\/editar\/[A-Za-z0-9_-]{1,40}$/.test(ruta)) {
       original = '/editar/:id';
       parametro = ruta.split('/')[2];
+      return res.redirect(
+        302,
+        '/cliente/editar?id=' + encodeURIComponent(parametro)
+      );
     } else if (metodo === 'post' &&
                ['/guardar-perfil','/accion','/accion-global']
                  .includes(ruta)) {
