@@ -2467,6 +2467,62 @@ const cq2RenderOriginal = (req, res) => {
     // CQ2_UN_PANEL_RENDER_PRIVADO_V1
   if (req.cliente) {
     const csrf = String(req.csrfCliente || '');
+    // CQ2_BOTON_CLAVE_CLIENTE_SEGURO
+    html = html.replace(
+      'async function accionPerfil(id, accion) {',
+      `async function accionPerfil(id, accion) {
+        if (accion === 'resetacceso') {
+          const ok = confirm(
+            'Generar nueva clave para el perfil ' + id +
+            '? La clave anterior dejara de funcionar. ' +
+            'No se borraran fotos ni datos.'
+          );
+          if (!ok) return;
+
+          try {
+            const respuesta = await fetch('/cliente/accion', {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({
+                id: id,
+                accion: 'resetacceso',
+                _csrf: ${JSON.stringify(csrf)}
+              })
+            });
+
+            const resultado = await respuesta.json()
+              .catch(() => ({}));
+
+            if (!respuesta.ok ||
+                resultado.ok !== true ||
+                !resultado.clave) {
+              alert('No se genero la clave. Error HTTP ' +
+                respuesta.status);
+              return;
+            }
+
+            prompt(
+              'CLAVE NUEVA DEL PERFIL ' + id +
+              '. Copiala y guardala:',
+              resultado.clave
+            );
+
+            location.reload();
+          } catch (e) {
+            alert('Error generando clave: ' + e.message);
+          }
+          return;
+        }
+      `
+    );
+
+    // Incluir CSRF al programar acciones del cliente.
+    html = html.replace(
+      'fechaHora: fechaHora.trim()',
+      'fechaHora: fechaHora.trim(), _csrf: ' +
+        JSON.stringify(csrf)
+    );
+
 
     html = html.replace(
       /<a[^>]*href="\/administracion"[^>]*>[\s\S]*?<\/a>/gi,

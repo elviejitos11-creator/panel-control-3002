@@ -349,6 +349,32 @@ module.exports = function(app) {
           )) return res.sendStatus(404);
         }
 
+        if (original === '/accion' &&
+            String(req.body.accion || '') === 'resetacceso') {
+
+          const id = String(req.body.id || '');
+          const perfiles = leerPerfiles(req.cliente.id);
+
+          if (!Object.prototype.hasOwnProperty.call(perfiles, id)) {
+            return res.sendStatus(404);
+          }
+
+          const nuevaClave = require('crypto')
+            .randomBytes(24)
+            .toString('hex');
+
+          perfiles[id].cliente_token = nuevaClave;
+
+          if (guardarPerfiles(req.cliente.id, perfiles) === false) {
+            return res.sendStatus(500);
+          }
+
+          return res.json({
+            ok: true,
+            perfil: id,
+            clave: nuevaClave
+          });
+        }
         if (original === '/accion-global' &&
             !['pausar_todas','reanudar_todas']
               .includes(String(req.body.accion || ''))) {
@@ -786,12 +812,12 @@ function cqEscapar(v) {
     .replace(/'/g, '&#39;');
 }
 
-app.get('/cliente/editar', (req, res) => {
+app.get(['/cliente/editar', '/cliente/editar/:id'], (req, res) => {
   if (!req.cliente || !req.cliente.id) {
     return res.status(403).send('Acceso no autorizado');
   }
 
-  const id = String(req.query.id || '');
+  const id = String(req.params.id || req.query.id || '').trim();
   const datos = leerPerfiles(req.cliente.id);
 
   if (!Object.prototype.hasOwnProperty.call(datos, id)) {
