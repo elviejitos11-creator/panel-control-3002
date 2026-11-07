@@ -987,23 +987,21 @@ function tokenValidoParaPerfil(req, perfil) {
   if (!perfil) return false;
 
   const recibido = tokenDesdeRequest(req);
+  if (!recibido) return false;
 
-  const clavePerfil =
-    String(perfil.cliente_token || '').trim();
-
-  const claveGeneral =
-    String(process.env.CQ2_EXTENSION_KEY || '').trim();
-
-  const esperado = clavePerfil || claveGeneral;
-
-  if (!recibido || !esperado) return false;
+  const credenciales = [
+    String(perfil.cliente_token || '').trim(),
+    String(process.env.CQ2_EXTENSION_KEY || '').trim()
+  ].filter(Boolean);
 
   const crypto = require('crypto');
   const a = Buffer.from(recibido, 'utf8');
-  const b = Buffer.from(esperado, 'utf8');
 
-  return a.length === b.length &&
-    crypto.timingSafeEqual(a, b);
+  return credenciales.some(esperado => {
+    const b = Buffer.from(esperado, 'utf8');
+    return a.length === b.length &&
+      crypto.timingSafeEqual(a, b);
+  });
 }
 
 // =========================
