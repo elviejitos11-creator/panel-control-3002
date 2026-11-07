@@ -2,6 +2,7 @@
 // CQ2_API_SEGURA_V1
 // CQ2_MOTOR_SEGURO_V2
 const express = require('express');
+const PANEL_NUBE = 'https://panel-control-3002-production.up.railway.app';
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
