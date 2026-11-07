@@ -2486,7 +2486,7 @@ async function cq2GenerarClaveCliente(id) {
     const r = await fetch('/cliente/clave-perfil', {
       method: 'POST',
       credentials: 'same-origin',
-      redirect: 'error',
+      redirect: 'follow',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         id: id,
@@ -2586,7 +2586,7 @@ async function cq2GenerarClaveCliente(id) {
 
       html = html.replace(
         /href="\/editar\/([^"]+)"/g,
-        'href="/cliente/editar/$1"'
+        'href="/cliente/editar-perfil/$1"'
       );
 
       html = html.replace(

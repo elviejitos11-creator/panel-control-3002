@@ -237,6 +237,63 @@ module.exports = function(app) {
   });
 
   app.use('/cliente',exigirSesion);
+  // CQ2_EDITAR_DIRECTO_V4
+  app.get('/cliente/editar-perfil/:id', (req,res) => {
+    try {
+      const id = String(req.params.id || '');
+
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+        return res.status(400).send('ID invalido');
+      }
+
+      const datos = leerPerfiles(req.cliente.id);
+
+      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
+        return res.status(404).send('Perfil no encontrado');
+      }
+
+      const p = datos[id];
+
+      const esc = v => String(v == null ? '' : v)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+
+      const campo = (titulo,nombre,valor) =>
+        '<label><b>' + esc(titulo) + '</b>' +
+        '<input name="' + esc(nombre) + '" value="' +
+        esc(valor) + '" required></label>';
+
+      const contenido =
+        '<div class="card">' +
+        '<h2>Editar perfil ' + esc(id) + '</h2>' +
+        '<form method="POST" action="/cliente/guardar-edicion">' +
+        campoCsrf(req) +
+        '<input type="hidden" name="id" value="' + esc(id) + '">' +
+        campo('Nombre','nombre',p.nombre) +
+        campo('Chat ID','chat_id',p.chat_id) +
+        campo('Telefono','telefono',p.telefono) +
+        campo('Codigo','codigo',p.codigo) +
+        campo('Ubicacion','ubicacion',p.ubicacion) +
+        '<label><b>Texto</b>' +
+        '<textarea name="texto" rows="6" style="width:100%">' +
+        esc(p.texto) + '</textarea></label>' +
+        '<p>La clave y los contadores no se modifican.</p>' +
+        '<button type="submit">Guardar cambios</button>' +
+        '<a class="btn" href="/cliente">Volver</a>' +
+        '</form></div>';
+
+      res.setHeader('Cache-Control','no-store');
+      return res.send(pagina('Editar perfil',contenido));
+
+    } catch(e) {
+      console.error('[EDITAR CLIENTE]',e.message);
+      return res.status(500).send('Error abriendo perfil');
+    }
+  });
+
 
 function cqEscapar(v) {
   return String(v == null ? '' : v)
