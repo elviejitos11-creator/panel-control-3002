@@ -238,6 +238,76 @@ module.exports = function(app) {
 
   app.use('/cliente',exigirSesion);
 
+function cqEscapar(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+app.get(['/cliente/editar', '/cliente/editar/:id'], (req, res) => {
+  if (!req.cliente || !req.cliente.id) {
+    return res.status(403).send('Acceso no autorizado');
+  }
+
+  const id = String(req.params.id || req.query.id || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+    return res.status(400).send('ID invalido');
+  }
+  const datos = leerPerfiles(req.cliente.id);
+
+  if (!Object.prototype.hasOwnProperty.call(datos, id)) {
+    return res.status(404).send('Perfil no encontrado');
+  }
+
+  const p = datos[id];
+
+  const campo = (titulo, nombre, valor) =>
+    '<label style="display:block;margin-top:14px">' +
+      '<b>' + cqEscapar(titulo) + '</b>' +
+      '<input style="display:block;width:100%;box-sizing:border-box;' +
+      'padding:12px;margin-top:6px" name="' +
+      cqEscapar(nombre) + '" value="' +
+      cqEscapar(valor) + '" />' +
+    '</label>';
+
+  const contenido =
+    '<div class="card">' +
+    '<h2>✏️ Editar perfil ' + cqEscapar(id) + '</h2>' +
+    '<form method="POST" action="/cliente/guardar-edicion">' +
+    campoCsrf(req) +
+    '<input type="hidden" name="id" value="' +
+      cqEscapar(id) + '">' +
+
+    campo('Nombre', 'nombre', p.nombre) +
+    campo('Chat ID', 'chat_id', p.chat_id) +
+    campo('Telefono', 'telefono', p.telefono) +
+    campo('Codigo', 'codigo', p.codigo) +
+    campo('Ubicacion', 'ubicacion', p.ubicacion) +
+
+    '<label style="display:block;margin-top:14px">' +
+    '<b>Texto</b>' +
+    '<textarea name="texto" rows="5" ' +
+      'style="display:block;width:100%;box-sizing:border-box;' +
+      'padding:12px;margin-top:6px">' +
+    cqEscapar(p.texto) +
+    '</textarea></label>' +
+
+    '<p>El token del perfil se conserva sin cambios.</p>' +
+
+    '<div style="margin-top:20px">' +
+    '<button type="submit">Guardar cambios</button> ' +
+    '<a href="/cliente">Volver</a>' +
+    '</div></form></div>';
+
+  return res.send(pagina('Editar perfil', contenido));
+});
+
+
+
+
 
   // CQ2_BORRADO_CLIENTE_FINAL_V1
   app.post('/cliente/cq-borrar-seguro',(req,res)=>{
@@ -836,74 +906,6 @@ app.use('/cliente', (req,res,next) => {
 
   
 /* CQ_EDICION_CLIENTES_V1 */
-
-function cqEscapar(v) {
-  return String(v == null ? '' : v)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-app.get(['/cliente/editar', '/cliente/editar/:id'], (req, res) => {
-  if (!req.cliente || !req.cliente.id) {
-    return res.status(403).send('Acceso no autorizado');
-  }
-
-  const id = String(req.params.id || req.query.id || '').trim();
-  if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
-    return res.status(400).send('ID invalido');
-  }
-  return res.redirect('/cliente/editar/' + encodeURIComponent(id));
-  const datos = leerPerfiles(req.cliente.id);
-
-  if (!Object.prototype.hasOwnProperty.call(datos, id)) {
-    return res.status(404).send('Perfil no encontrado');
-  }
-
-  const p = datos[id];
-
-  const campo = (titulo, nombre, valor) =>
-    '<label style="display:block;margin-top:14px">' +
-      '<b>' + cqEscapar(titulo) + '</b>' +
-      '<input style="display:block;width:100%;box-sizing:border-box;' +
-      'padding:12px;margin-top:6px" name="' +
-      cqEscapar(nombre) + '" value="' +
-      cqEscapar(valor) + '" />' +
-    '</label>';
-
-  const contenido =
-    '<div class="card">' +
-    '<h2>✏️ Editar perfil ' + cqEscapar(id) + '</h2>' +
-    '<form method="POST" action="/cliente/guardar-edicion">' +
-    campoCsrf(req) +
-    '<input type="hidden" name="id" value="' +
-      cqEscapar(id) + '">' +
-
-    campo('Nombre', 'nombre', p.nombre) +
-    campo('Chat ID', 'chat_id', p.chat_id) +
-    campo('Telefono', 'telefono', p.telefono) +
-    campo('Codigo', 'codigo', p.codigo) +
-    campo('Ubicacion', 'ubicacion', p.ubicacion) +
-
-    '<label style="display:block;margin-top:14px">' +
-    '<b>Texto</b>' +
-    '<textarea name="texto" rows="5" ' +
-      'style="display:block;width:100%;box-sizing:border-box;' +
-      'padding:12px;margin-top:6px">' +
-    cqEscapar(p.texto) +
-    '</textarea></label>' +
-
-    '<p>El token del perfil se conserva sin cambios.</p>' +
-
-    '<div style="margin-top:20px">' +
-    '<button type="submit">Guardar cambios</button> ' +
-    '<a href="/cliente">Volver</a>' +
-    '</div></form></div>';
-
-  return res.send(pagina('Editar perfil', contenido));
-});
 
 app.post('/cliente/guardar-edicion', (req, res) => {
   if (!req.cliente || !req.cliente.id) {

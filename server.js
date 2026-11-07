@@ -2467,6 +2467,55 @@ const cq2RenderOriginal = (req, res) => {
     // CQ2_UN_PANEL_RENDER_PRIVADO_V1
   if (req.cliente) {
     const csrf = String(req.csrfCliente || '');
+    // CQ2_CLIENTE_BOTON_DIRECTO_V3
+    html = html.replace(
+      /onclick="accionPerfil\('([^']+)','resetacceso'\)"/g,
+      'onclick="cq2GenerarClaveCliente(\'$1\')"'
+    );
+
+    html = html.replace(
+      /<\/body>/i,
+      `<script>
+async function cq2GenerarClaveCliente(id) {
+  if (!confirm(
+    'Generar clave nueva para el perfil ' + id +
+    '? La anterior dejara de funcionar.'
+  )) return;
+
+  try {
+    const r = await fetch('/cliente/clave-perfil', {
+      method: 'POST',
+      credentials: 'same-origin',
+      redirect: 'error',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        id: id,
+        _csrf: ${JSON.stringify(csrf)}
+      })
+    });
+
+    const tipo = r.headers.get('content-type') || '';
+    if (!r.ok || !tipo.includes('application/json')) {
+      alert('Error de servidor HTTP ' + r.status);
+      return;
+    }
+
+    const d = await r.json();
+    if (!d.ok || typeof d.clave !== 'string' ||
+        !d.clave.length) {
+      alert('El servidor no devolvio una clave valida.');
+      return;
+    }
+
+    prompt('COPIA LA CLAVE NUEVA DEL PERFIL ' + id, d.clave);
+    location.reload();
+  } catch(e) {
+    alert('No se pudo generar la clave: ' + e.message);
+  }
+}
+      </script></body>`
+    );
+
     // CQ2_BOTON_CLAVE_CLIENTE_SEGURO
     html = html.replace(
       'async function accionPerfil(id, accion) {',
