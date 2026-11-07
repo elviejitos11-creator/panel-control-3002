@@ -272,7 +272,14 @@ module.exports = function(app) {
       const datos = leerPerfiles(req.cliente.id);
 
       if (!Object.prototype.hasOwnProperty.call(datos,id)) {
-        return res.status(404).send('Perfil no encontrado');
+        return res.status(404).type('text/plain').send(
+          'DIAGNOSTICO EDITAR CLIENTE' +
+          '\nID solicitado: ' + id +
+          '\nIDs disponibles: ' +
+          Object.keys(datos).join(', ') +
+          '\nRuta: ' + req.originalUrl +
+          '\nProceso: ' + process.pid
+        );
       }
 
       if (clave) {
