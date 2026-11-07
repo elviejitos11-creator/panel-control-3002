@@ -2480,7 +2480,7 @@ const cq2RenderOriginal = (req, res) => {
           if (!ok) return;
 
           try {
-            const respuesta = await fetch('/cliente/accion', {
+            const respuesta = await fetch('/cliente/clave-perfil', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
               body: JSON.stringify({
@@ -2537,7 +2537,7 @@ const cq2RenderOriginal = (req, res) => {
 
       html = html.replace(
         /href="\/editar\/([^"]+)"/g,
-        'href="/cliente/editar?id=$1"'
+        'href="/cliente/editar/$1"'
       );
 
       html = html.replace(

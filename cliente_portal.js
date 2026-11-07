@@ -272,6 +272,44 @@ module.exports = function(app) {
     }
   });
 
+  // CQ2_GENERAR_CLAVE_CLIENTE_V2
+  app.post('/cliente/clave-perfil', (req,res) => {
+    try {
+      const s = sesiones.get(cookie(req));
+      if (!req.cliente || !s ||
+          !req.body || req.body._csrf !== s.csrf) {
+        return res.sendStatus(403);
+      }
+
+      const id = String(req.body.id || '');
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+        return res.sendStatus(400);
+      }
+
+      const datos = leerPerfiles(req.cliente.id);
+      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
+        return res.sendStatus(404);
+      }
+
+      const archivo = archivoCliente(req.cliente.id);
+      fs.copyFileSync(
+        archivo,
+        archivo + '.before-key-' + Date.now() + '.bak'
+      );
+
+      const clave = require('crypto')
+        .randomBytes(24).toString('hex');
+
+      datos[id].cliente_token = clave;
+      guardarPerfiles(req.cliente.id,datos);
+
+      res.setHeader('Cache-Control','no-store');
+      return res.json({ok:true,perfil:id,clave:clave});
+    } catch(e) {
+      console.error('[CLAVE CLIENTE]',e.message);
+      return res.sendStatus(500);
+    }
+  });
   // CQ2_UN_PANEL_RUTAS_ORIGINALES_V1
   app.use('/cliente', (req,res,next) => {
     const ruta = req.path;
@@ -288,10 +326,6 @@ module.exports = function(app) {
                /^\/editar\/[A-Za-z0-9_-]{1,40}$/.test(ruta)) {
       original = '/editar/:id';
       parametro = ruta.split('/')[2];
-      return res.redirect(
-        302,
-        '/cliente/editar?id=' + encodeURIComponent(parametro)
-      );
     } else if (metodo === 'post' &&
                ['/guardar-perfil','/accion','/accion-global']
                  .includes(ruta)) {
@@ -818,6 +852,10 @@ app.get(['/cliente/editar', '/cliente/editar/:id'], (req, res) => {
   }
 
   const id = String(req.params.id || req.query.id || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+    return res.status(400).send('ID invalido');
+  }
+  return res.redirect('/cliente/editar/' + encodeURIComponent(id));
   const datos = leerPerfiles(req.cliente.id);
 
   if (!Object.prototype.hasOwnProperty.call(datos, id)) {
