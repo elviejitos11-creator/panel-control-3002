@@ -342,6 +342,218 @@ app.get('/administracion', (req, res) => {
 });
 
 
+// CQ2_ADMIN_EDICION_CLAVE_V7
+function cq2AdminEsc7(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function cq2AdminDatos7(req) {
+  const store = require('./clientes_store');
+  const cliente = store.listar().find(c => c.id === req.params.id);
+  if (!cliente) return null;
+
+  const archivo = path.join(
+    store.carpetaCliente(cliente.id), 'data.json'
+  );
+
+  const datos = JSON.parse(fs.readFileSync(archivo,'utf8'));
+  if (!datos || typeof datos !== 'object' ||
+      Array.isArray(datos)) {
+    throw new Error('Datos del cliente invalidos');
+  }
+
+  return {cliente,archivo,datos};
+}
+
+function cq2AdminOrigen7(req) {
+  const origen = req.get('origin');
+  const esperado =
+    (req.get('x-forwarded-proto') || req.protocol) +
+    '://' + req.get('host');
+  return !origen || origen === esperado;
+}
+
+function cq2AdminGuardar7(archivo,datos) {
+  fs.copyFileSync(
+    archivo,archivo + '.admin-edit-' + Date.now() + '.bak'
+  );
+
+  const temporal = archivo + '.tmp';
+  fs.writeFileSync(temporal,JSON.stringify(datos,null,2),'utf8');
+  fs.renameSync(temporal,archivo);
+}
+
+function cq2AdminPagina7(titulo,contenido) {
+  return '<!doctype html><html lang="es"><head>' +
+    '<meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + cq2AdminEsc7(titulo) + '</title>' +
+    '<style>body{background:#0b1c2c;color:white;font:16px Arial;' +
+    'padding:20px}main{max-width:650px;margin:auto}' +
+    'input,textarea{box-sizing:border-box;width:100%;padding:12px;' +
+    'margin:7px 0 15px;border-radius:8px;border:0}' +
+    'button,a.btn{display:inline-block;padding:12px 18px;' +
+    'background:#1565c0;color:white;border:0;border-radius:8px;' +
+    'text-decoration:none;margin:5px}' +
+    '</style></head><body><main>' + contenido +
+    '</main></body></html>';
+}
+
+// Abrir el perfil del cliente desde administracion.
+app.get('/admin/cliente/:id/editar/:perfil',(req,res)=>{
+  if(req.admin !== true) return res.sendStatus(403);
+
+  try {
+    const x = cq2AdminDatos7(req);
+    if(!x) return res.sendStatus(404);
+
+    const id = String(req.params.perfil || '');
+    if(!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
+       !Object.prototype.hasOwnProperty.call(x.datos,id)) {
+      return res.sendStatus(404);
+    }
+
+    const p = x.datos[id];
+    const e = cq2AdminEsc7;
+
+    const campo = (titulo,nombre,valor) =>
+      '<label><b>' + e(titulo) + '</b>' +
+      '<input name="' + e(nombre) + '" value="' +
+      e(valor) + '"></label>';
+
+    const destino = '/admin/cliente/' +
+      encodeURIComponent(x.cliente.id) + '/editar/' +
+      encodeURIComponent(id);
+
+    const volver = '/admin/panel/' +
+      encodeURIComponent(x.cliente.id);
+
+    const contenido =
+      '<h2>Editar perfil ' + e(id) + '</h2>' +
+      '<form method="POST" action="' + destino + '">' +
+      campo('Nombre','nombre',p.nombre) +
+      campo('Chat ID','chat_id',p.chat_id) +
+      campo('Telefono','telefono',p.telefono) +
+      campo('Codigo','codigo',p.codigo) +
+      campo('Ubicacion','ubicacion',p.ubicacion) +
+      '<label><b>Texto</b>' +
+      '<textarea name="texto" rows="6">' +
+      e(p.texto) + '</textarea></label>' +
+      '<p>La clave, fotos y contadores no se modifican.</p>' +
+      '<button type="submit">Guardar cambios</button>' +
+      '<a class="btn" href="' + volver + '">Volver</a>' +
+      '</form>';
+
+    res.setHeader('Cache-Control','no-store');
+    return res.send(cq2AdminPagina7('Editar perfil',contenido));
+  } catch(err) {
+    console.error('[CQ2 ADMIN EDITAR]',err.message);
+    return res.sendStatus(500);
+  }
+});
+
+// Guardar unicamente los campos editables.
+app.post('/admin/cliente/:id/editar/:perfil',(req,res)=>{
+  if(req.admin !== true) return res.sendStatus(403);
+  if(!cq2AdminOrigen7(req)) return res.sendStatus(403);
+
+  try {
+    const x = cq2AdminDatos7(req);
+    if(!x) return res.sendStatus(404);
+
+    const id = String(req.params.perfil || '');
+    if(!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
+       !Object.prototype.hasOwnProperty.call(x.datos,id)) {
+      return res.sendStatus(404);
+    }
+
+    const campos = [
+      'nombre','chat_id','telefono',
+      'codigo','ubicacion','texto'
+    ];
+
+    const nuevos = {};
+    for(const campo of campos) {
+      if(typeof req.body[campo] !== 'string') {
+        return res.status(400).send('Campo invalido: ' + campo);
+      }
+      nuevos[campo] = req.body[campo].trim();
+
+      const max = campo === 'texto' ? 5000 : 200;
+      if(nuevos[campo].length > max) {
+        return res.status(400).send('Campo demasiado largo');
+      }
+    }
+
+    if(!nuevos.nombre || nuevos.nombre.length > 100) {
+      return res.status(400).send('Nombre invalido');
+    }
+
+    if(nuevos.chat_id &&
+       !/^-?[0-9]{5,20}$/.test(nuevos.chat_id)) {
+      return res.status(400).send('Chat ID invalido');
+    }
+
+    Object.assign(x.datos[id],nuevos);
+    cq2AdminGuardar7(x.archivo,x.datos);
+
+    return res.redirect(
+      '/admin/panel/' + encodeURIComponent(x.cliente.id)
+    );
+  } catch(err) {
+    console.error('[CQ2 ADMIN GUARDAR EDITAR]',err.message);
+    return res.sendStatus(500);
+  }
+});
+
+// Generar una clave desde la sesion del administrador.
+app.post('/admin/cliente/:id/clave/:perfil',(req,res)=>{
+  if(req.admin !== true) return res.sendStatus(403);
+  if(!cq2AdminOrigen7(req)) return res.sendStatus(403);
+
+  try {
+    const x = cq2AdminDatos7(req);
+    if(!x) return res.sendStatus(404);
+
+    const id = String(req.params.perfil || '');
+    if(!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
+       !Object.prototype.hasOwnProperty.call(x.datos,id)) {
+      return res.sendStatus(404);
+    }
+
+    const clave = require('crypto')
+      .randomBytes(24).toString('hex');
+
+    x.datos[id].cliente_token = clave;
+    cq2AdminGuardar7(x.archivo,x.datos);
+
+    const volver = '/admin/panel/' +
+      encodeURIComponent(x.cliente.id);
+
+    res.setHeader('Cache-Control','no-store');
+    res.setHeader('Referrer-Policy','no-referrer');
+
+    return res.send(cq2AdminPagina7(
+      'Nueva clave',
+      '<h2>Clave nueva del perfil ' +
+      cq2AdminEsc7(id) + '</h2>' +
+      '<p>Copia y guarda esta clave:</p>' +
+      '<input readonly onclick="this.select()" value="' +
+      cq2AdminEsc7(clave) + '">' +
+      '<p>La clave anterior deja de funcionar.</p>' +
+      '<a class="btn" href="' + volver + '">Volver al panel</a>'
+    ));
+  } catch(err) {
+    console.error('[CQ2 ADMIN GENERAR CLAVE]',err.message);
+    return res.sendStatus(500);
+  }
+});
+// FIN CQ2_ADMIN_EDICION_CLAVE_V7
 // CQ2_PANEL_ADMIN_CLIENTE_ORIGINAL_V3
 app.get('/admin/panel/:id', (req, res) => {
   if (req.admin !== true) return res.sendStatus(403);
@@ -413,6 +625,41 @@ app.get('/admin/panel/:id', (req, res) => {
             "fetch('/admin/cliente/" + cid + "/accion'"
           );
           html = html.replace(/<\/body>/i,script+'</body>');
+        }
+                if (typeof html === 'string') {
+          const cidAdmin = encodeURIComponent(cliente.id);
+
+          html = html.replace(
+            /href="\/editar\/([A-Za-z0-9_-]+)"/g,
+            (_,pid) =>
+              'href="/admin/cliente/' + cidAdmin +
+              '/editar/' + encodeURIComponent(pid) + '"'
+          );
+
+          html = html.replace(
+            /onclick="cq2GenerarClaveCliente\('([A-Za-z0-9_-]+)'\)"/g,
+            (_,pid) =>
+              `onclick="cq2ClaveDesdeAdmin('${pid}')"`
+          );
+
+          const destinoClave = JSON.stringify(
+            '/admin/cliente/' + cidAdmin + '/clave/'
+          );
+
+          const scriptClave =
+            '<script>function cq2ClaveDesdeAdmin(id){' +
+            'if(!confirm("Generar clave nueva para perfil "+id+' +
+            '"? La anterior dejara de funcionar."))return;' +
+            'const f=document.createElement("form");' +
+            'f.method="POST";' +
+            'f.action=' + destinoClave +
+              '+encodeURIComponent(id);' +
+            'document.body.appendChild(f);f.submit();' +
+            '}</script>';
+
+          html = html.replace(
+            /<\/body>/i,scriptClave + '</body>'
+          );
         }
         return enviarOriginal(html);
     };
