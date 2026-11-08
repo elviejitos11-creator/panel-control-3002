@@ -343,216 +343,231 @@ app.get('/administracion', (req, res) => {
 
 
 // CQ2_ADMIN_EDICION_CLAVE_V7
-function cq2AdminEsc7(v) {
-  return String(v == null ? '' : v)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
-}
+// CQ2_REUTILIZAR_MOTOR_ORIGINAL_V8
 
-function cq2AdminDatos7(req) {
+function cq2AdminPerfilOriginal8(req) {
   const store = require('./clientes_store');
-  const cliente = store.listar().find(c => c.id === req.params.id);
-  if (!cliente) return null;
 
-  const archivo = path.join(
-    store.carpetaCliente(cliente.id), 'data.json'
+  const cliente = store.listar().find(
+    c => c.id === req.params.id
   );
 
-  const datos = JSON.parse(fs.readFileSync(archivo,'utf8'));
-  if (!datos || typeof datos !== 'object' ||
-      Array.isArray(datos)) {
-    throw new Error('Datos del cliente invalidos');
+  if (!cliente) return null;
+
+  const perfilId = String(req.params.perfil || '');
+
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(perfilId)) {
+    return null;
   }
 
-  return {cliente,archivo,datos};
+  const archivo = path.join(
+    store.carpetaCliente(cliente.id),
+    'data.json'
+  );
+
+  const datos = JSON.parse(
+    fs.readFileSync(archivo, 'utf8')
+  );
+
+  if (!datos || Array.isArray(datos) ||
+      typeof datos !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(datos, perfilId)) {
+    return null;
+  }
+
+  return { cliente, perfilId, archivo, datos };
 }
 
-function cq2AdminOrigen7(req) {
+function cq2AdminRutaOriginal8(ruta, metodo) {
+  const capa = app.router.stack.find(
+    l => l.route &&
+      l.route.path === ruta &&
+      l.route.methods[metodo]
+  );
+
+  return capa && capa.route.stack[0].handle;
+}
+
+function cq2AdminOrigenOriginal8(req) {
   const origen = req.get('origin');
   const esperado =
     (req.get('x-forwarded-proto') || req.protocol) +
     '://' + req.get('host');
+
   return !origen || origen === esperado;
 }
 
-function cq2AdminGuardar7(archivo,datos) {
-  fs.copyFileSync(
-    archivo,archivo + '.admin-edit-' + Date.now() + '.bak'
-  );
+// EDITAR: ejecutar el formulario REAL del panel principal
+// usando el contexto de almacenamiento del cliente.
+app.get('/admin/cliente/:id/editar/:perfil',
+  (req, res, next) => {
+    if (req.admin !== true) return res.sendStatus(403);
 
-  const temporal = archivo + '.tmp';
-  fs.writeFileSync(temporal,JSON.stringify(datos,null,2),'utf8');
-  fs.renameSync(temporal,archivo);
-}
+    try {
+      const x = cq2AdminPerfilOriginal8(req);
+      if (!x) return res.sendStatus(404);
 
-function cq2AdminPagina7(titulo,contenido) {
-  return '<!doctype html><html lang="es"><head>' +
-    '<meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>' + cq2AdminEsc7(titulo) + '</title>' +
-    '<style>body{background:#0b1c2c;color:white;font:16px Arial;' +
-    'padding:20px}main{max-width:650px;margin:auto}' +
-    'input,textarea{box-sizing:border-box;width:100%;padding:12px;' +
-    'margin:7px 0 15px;border-radius:8px;border:0}' +
-    'button,a.btn{display:inline-block;padding:12px 18px;' +
-    'background:#1565c0;color:white;border:0;border-radius:8px;' +
-    'text-decoration:none;margin:5px}' +
-    '</style></head><body><main>' + contenido +
-    '</main></body></html>';
-}
+      const originalEditar = cq2AdminRutaOriginal8(
+        '/editar/:id', 'get'
+      );
 
-// Abrir el perfil del cliente desde administracion.
-app.get('/admin/cliente/:id/editar/:perfil',(req,res)=>{
-  if(req.admin !== true) return res.sendStatus(403);
-
-  try {
-    const x = cq2AdminDatos7(req);
-    if(!x) return res.sendStatus(404);
-
-    const id = String(req.params.perfil || '');
-    if(!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
-       !Object.prototype.hasOwnProperty.call(x.datos,id)) {
-      return res.sendStatus(404);
-    }
-
-    const p = x.datos[id];
-    const e = cq2AdminEsc7;
-
-    const campo = (titulo,nombre,valor) =>
-      '<label><b>' + e(titulo) + '</b>' +
-      '<input name="' + e(nombre) + '" value="' +
-      e(valor) + '"></label>';
-
-    const destino = '/admin/cliente/' +
-      encodeURIComponent(x.cliente.id) + '/editar/' +
-      encodeURIComponent(id);
-
-    const volver = '/admin/panel/' +
-      encodeURIComponent(x.cliente.id);
-
-    const contenido =
-      '<h2>Editar perfil ' + e(id) + '</h2>' +
-      '<form method="POST" action="' + destino + '">' +
-      campo('Nombre','nombre',p.nombre) +
-      campo('Chat ID','chat_id',p.chat_id) +
-      campo('Telefono','telefono',p.telefono) +
-      campo('Codigo','codigo',p.codigo) +
-      campo('Ubicacion','ubicacion',p.ubicacion) +
-      '<label><b>Texto</b>' +
-      '<textarea name="texto" rows="6">' +
-      e(p.texto) + '</textarea></label>' +
-      '<p>La clave, fotos y contadores no se modifican.</p>' +
-      '<button type="submit">Guardar cambios</button>' +
-      '<a class="btn" href="' + volver + '">Volver</a>' +
-      '</form>';
-
-    res.setHeader('Cache-Control','no-store');
-    return res.send(cq2AdminPagina7('Editar perfil',contenido));
-  } catch(err) {
-    console.error('[CQ2 ADMIN EDITAR]',err.message);
-    return res.sendStatus(500);
-  }
-});
-
-// Guardar unicamente los campos editables.
-app.post('/admin/cliente/:id/editar/:perfil',(req,res)=>{
-  if(req.admin !== true) return res.sendStatus(403);
-  if(!cq2AdminOrigen7(req)) return res.sendStatus(403);
-
-  try {
-    const x = cq2AdminDatos7(req);
-    if(!x) return res.sendStatus(404);
-
-    const id = String(req.params.perfil || '');
-    if(!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
-       !Object.prototype.hasOwnProperty.call(x.datos,id)) {
-      return res.sendStatus(404);
-    }
-
-    const campos = [
-      'nombre','chat_id','telefono',
-      'codigo','ubicacion','texto'
-    ];
-
-    const nuevos = {};
-    for(const campo of campos) {
-      if(typeof req.body[campo] !== 'string') {
-        return res.status(400).send('Campo invalido: ' + campo);
+      if (!originalEditar) {
+        return res.status(500).send(
+          'Formulario original no disponible'
+        );
       }
-      nuevos[campo] = req.body[campo].trim();
 
-      const max = campo === 'texto' ? 5000 : 200;
-      if(nuevos[campo].length > max) {
-        return res.status(400).send('Campo demasiado largo');
+      const cid = encodeURIComponent(x.cliente.id);
+      const pid = encodeURIComponent(x.perfilId);
+
+      const guardar =
+        '/admin/cliente/' + cid + '/editar/' + pid;
+
+      const volver = '/admin/panel/' + cid;
+
+      const enviar = res.send.bind(res);
+
+      res.send = function(html) {
+        if (typeof html === 'string') {
+          html = html.replace(
+            /action="\/guardar-perfil"/g,
+            'action="' + guardar + '"'
+          );
+
+          html = html.replace(
+            /href="\/"/g,
+            'href="' + volver + '"'
+          );
+        }
+
+        res.setHeader('Cache-Control', 'no-store');
+        return enviar(html);
+      };
+
+      req.params = { id: x.perfilId };
+
+      return app.locals.cq2ConCliente(
+        x.cliente,
+        () => originalEditar(req, res, next)
+      );
+    } catch (e) {
+      console.error('[CQ2 EDITAR ORIGINAL]', e.message);
+      return res.sendStatus(500);
+    }
+  }
+);
+
+// GUARDAR: ejecutar el guardado REAL del panel principal
+// dentro del almacenamiento del cliente seleccionado.
+app.post('/admin/cliente/:id/editar/:perfil',
+  (req, res, next) => {
+    if (req.admin !== true) return res.sendStatus(403);
+    if (!cq2AdminOrigenOriginal8(req)) {
+      return res.sendStatus(403);
+    }
+
+    try {
+      const x = cq2AdminPerfilOriginal8(req);
+      if (!x) return res.sendStatus(404);
+
+      const originalGuardar = cq2AdminRutaOriginal8(
+        '/guardar-perfil', 'post'
+      );
+
+      if (!originalGuardar) {
+        return res.status(500).send(
+          'Guardado original no disponible'
+        );
       }
+
+      const cid = encodeURIComponent(x.cliente.id);
+      const volver = '/admin/panel/' + cid;
+
+      // Impedir que el formulario cambie el ID.
+      req.body.id = x.perfilId;
+      delete req.body._cq2_crear;
+
+      const redirigir = res.redirect.bind(res);
+
+      res.redirect = function(destino) {
+        return redirigir(
+          destino === '/' ? volver : destino
+        );
+      };
+
+      return app.locals.cq2ConCliente(
+        x.cliente,
+        () => originalGuardar(req, res, next)
+      );
+    } catch (e) {
+      console.error('[CQ2 GUARDAR ORIGINAL]', e.message);
+      return res.sendStatus(500);
     }
-
-    if(!nuevos.nombre || nuevos.nombre.length > 100) {
-      return res.status(400).send('Nombre invalido');
-    }
-
-    if(nuevos.chat_id &&
-       !/^-?[0-9]{5,20}$/.test(nuevos.chat_id)) {
-      return res.status(400).send('Chat ID invalido');
-    }
-
-    Object.assign(x.datos[id],nuevos);
-    cq2AdminGuardar7(x.archivo,x.datos);
-
-    return res.redirect(
-      '/admin/panel/' + encodeURIComponent(x.cliente.id)
-    );
-  } catch(err) {
-    console.error('[CQ2 ADMIN GUARDAR EDITAR]',err.message);
-    return res.sendStatus(500);
   }
-});
+);
 
-// Generar una clave desde la sesion del administrador.
-app.post('/admin/cliente/:id/clave/:perfil',(req,res)=>{
-  if(req.admin !== true) return res.sendStatus(403);
-  if(!cq2AdminOrigen7(req)) return res.sendStatus(403);
-
-  try {
-    const x = cq2AdminDatos7(req);
-    if(!x) return res.sendStatus(404);
-
-    const id = String(req.params.perfil || '');
-    if(!/^[A-Za-z0-9_-]{1,40}$/.test(id) ||
-       !Object.prototype.hasOwnProperty.call(x.datos,id)) {
-      return res.sendStatus(404);
+// CLAVE: utilizar el generador ORIGINAL de Panel PRO.
+// No ejecutar resetearAccesoPerfil, que tambien borra datos.
+app.post('/admin/cliente/:id/clave/:perfil',
+  (req, res) => {
+    if (req.admin !== true) return res.sendStatus(403);
+    if (!cq2AdminOrigenOriginal8(req)) {
+      return res.sendStatus(403);
     }
 
-    const clave = require('crypto')
-      .randomBytes(24).toString('hex');
+    try {
+      const x = cq2AdminPerfilOriginal8(req);
+      if (!x) return res.sendStatus(404);
 
-    x.datos[id].cliente_token = clave;
-    cq2AdminGuardar7(x.archivo,x.datos);
+      const nuevaClave = generarTokenAcceso();
 
-    const volver = '/admin/panel/' +
-      encodeURIComponent(x.cliente.id);
+      // Respaldo anterior al cambio.
+      fs.copyFileSync(
+        x.archivo,
+        x.archivo + '.before-key-' + Date.now() + '.bak'
+      );
 
-    res.setHeader('Cache-Control','no-store');
-    res.setHeader('Referrer-Policy','no-referrer');
+      // Unicamente sustituir la clave.
+      x.datos[x.perfilId].cliente_token = nuevaClave;
 
-    return res.send(cq2AdminPagina7(
-      'Nueva clave',
-      '<h2>Clave nueva del perfil ' +
-      cq2AdminEsc7(id) + '</h2>' +
-      '<p>Copia y guarda esta clave:</p>' +
-      '<input readonly onclick="this.select()" value="' +
-      cq2AdminEsc7(clave) + '">' +
-      '<p>La clave anterior deja de funcionar.</p>' +
-      '<a class="btn" href="' + volver + '">Volver al panel</a>'
-    ));
-  } catch(err) {
-    console.error('[CQ2 ADMIN GENERAR CLAVE]',err.message);
-    return res.sendStatus(500);
+      const temporal = x.archivo + '.tmp';
+      fs.writeFileSync(
+        temporal,
+        JSON.stringify(x.datos, null, 2),
+        'utf8'
+      );
+      fs.renameSync(temporal, x.archivo);
+
+      const cid = encodeURIComponent(x.cliente.id);
+      const volver = '/admin/panel/' + cid;
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+
+      return res.type('html').send(
+        '<!doctype html><html lang="es"><head>' +
+        '<meta charset="utf-8">' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+        '<style>body{font:18px Arial;background:#0b1c2c;color:white;padding:25px}' +
+        'input{width:100%;box-sizing:border-box;padding:15px;font-size:18px}' +
+        'a{display:inline-block;margin-top:24px;background:#1565c0;' +
+        'color:white;padding:15px;text-decoration:none;border-radius:8px}' +
+        '</style></head><body>' +
+        '<h2>Clave generada - Perfil ' + x.perfilId + '</h2>' +
+        '<p>Clave automatica del Panel PRO:</p>' +
+        '<input readonly onclick="this.select()" value="' +
+        nuevaClave + '">' +
+        '<p>La clave anterior deja de funcionar.</p>' +
+        '<a href="' + volver + '">Volver al panel</a>' +
+        '</body></html>'
+      );
+    } catch (e) {
+      console.error('[CQ2 CLAVE ORIGINAL]', e.message);
+      return res.sendStatus(500);
+    }
   }
-});
+);
+
 // FIN CQ2_ADMIN_EDICION_CLAVE_V7
 // CQ2_PANEL_ADMIN_CLIENTE_ORIGINAL_V3
 app.get('/admin/panel/:id', (req, res) => {
