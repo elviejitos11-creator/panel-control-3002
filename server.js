@@ -1660,9 +1660,14 @@ function borrarPerfil(id) {
 }
 
 function cq2ProgramarFechaExacta(id, accion, entrada) {
-  const texto = String(entrada || '').trim().toUpperCase();
+  // CQ2_MANANA_UNICODE_FIX_V2
+  const texto = String(entrada || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 
-  const m = /^(HOY|MAÑANA|MANANA|(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(texto);
+  const m = /^(HOY|MANANA|(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(texto);
 
   if (!m) {
     throw new Error('Formato invalido. Ejemplo: HOY 8:00 PM');
