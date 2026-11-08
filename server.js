@@ -541,25 +541,11 @@ app.post('/admin/cliente/:id/clave/:perfil',
       const cid = encodeURIComponent(x.cliente.id);
       const volver = '/admin/panel/' + cid;
 
-      res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Cache-Control','no-store');
 
-      return res.type('html').send(
-        '<!doctype html><html lang="es"><head>' +
-        '<meta charset="utf-8">' +
-        '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-        '<style>body{font:18px Arial;background:#0b1c2c;color:white;padding:25px}' +
-        'input{width:100%;box-sizing:border-box;padding:15px;font-size:18px}' +
-        'a{display:inline-block;margin-top:24px;background:#1565c0;' +
-        'color:white;padding:15px;text-decoration:none;border-radius:8px}' +
-        '</style></head><body>' +
-        '<h2>Clave generada - Perfil ' + x.perfilId + '</h2>' +
-        '<p>Clave automatica del Panel PRO:</p>' +
-        '<input readonly onclick="this.select()" value="' +
-        nuevaClave + '">' +
-        '<p>La clave anterior deja de funcionar.</p>' +
-        '<a href="' + volver + '">Volver al panel</a>' +
-        '</body></html>'
+      return res.redirect(
+        303,
+        '/admin/panel/' + encodeURIComponent(x.cliente.id)
       );
     } catch (e) {
       console.error('[CQ2 CLAVE ORIGINAL]', e.message);
