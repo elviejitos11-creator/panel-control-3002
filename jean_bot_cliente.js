@@ -597,6 +597,174 @@ function cqPendienteClave(chat, usuario) {
   return String(chat) + ':' + String(usuario);
 }
 
+ // CQ2_TELEGRAM_AGENDA_COMPARTIDA_V1
+
+function cq2FechaRDTelegram(entrada) {
+  const texto = String(entrada || '')
+    .trim().toUpperCase()
+    .replace(/Ñ/g, 'N')
+    .replace(/\s+/g, ' ');
+
+  const m = /^(HOY|MANANA|(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?)\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(texto);
+  if (!m) return null;
+
+  const ahora = new Date(Date.now() - 14400000);
+  let anio = ahora.getUTCFullYear();
+  let mes = ahora.getUTCMonth() + 1;
+  let dia = ahora.getUTCDate();
+
+  if (m[1] === 'MANANA') {
+    const d = new Date(Date.UTC(anio, mes - 1, dia + 1));
+    anio = d.getUTCFullYear();
+    mes = d.getUTCMonth() + 1;
+    dia = d.getUTCDate();
+  } else if (m[2]) {
+    dia = Number(m[2]);
+    mes = Number(m[3]);
+    if (m[4]) anio = Number(m[4]);
+  }
+
+  const hora12 = Number(m[5]);
+  const minuto = Number(m[6]);
+
+  if (hora12 < 1 || hora12 > 12 || minuto > 59) {
+    return null;
+  }
+
+  const hora = hora12 % 12 + (m[7] === 'PM' ? 12 : 0);
+  const ts = Date.UTC(anio, mes - 1, dia, hora + 4, minuto);
+  const comprobar = new Date(ts - 14400000);
+
+  if (comprobar.getUTCFullYear() !== anio ||
+      comprobar.getUTCMonth() + 1 !== mes ||
+      comprobar.getUTCDate() !== dia ||
+      comprobar.getUTCHours() !== hora ||
+      comprobar.getUTCMinutes() !== minuto) {
+    return null;
+  }
+
+  if (ts <= Date.now() ||
+      ts > Date.now() + 366 * 86400000) {
+    return null;
+  }
+
+  return ts;
+}
+
+function cq2FechaLegibleRD(ts) {
+  return new Date(ts).toLocaleString('es-DO', {
+    timeZone: 'America/Santo_Domingo',
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
+}
+
+function cq2RutaAgendaCliente(cliente) {
+  return path.join(
+    store.carpetaCliente(cliente.id),
+    'bot_state.json'
+  );
+}
+
+function cq2LeerAgendaCliente(cliente) {
+  const archivo = cq2RutaAgendaCliente(cliente);
+  const datos = JSON.parse(fs.readFileSync(archivo, 'utf8'));
+
+  if (!datos || typeof datos !== 'object' ||
+      !Array.isArray(datos.schedules)) {
+    throw new Error('Agenda del cliente invalida');
+  }
+
+  return datos;
+}
+
+function cq2GuardarAgendaCliente(cliente, datos) {
+  const archivo = cq2RutaAgendaCliente(cliente);
+  const temporal = archivo + '.tmp';
+
+  fs.writeFileSync(
+    temporal,
+    JSON.stringify(datos, null, 2),
+    'utf8'
+  );
+
+  fs.renameSync(temporal, archivo);
+}
+
+function cq2ProgramarClienteTelegram(cliente, id, accion, ts) {
+  const agenda = cq2LeerAgendaCliente(cliente);
+
+  agenda.schedules.push({
+    id: String(id),
+    accion: accion,
+    ejecutarEn: ts
+  });
+
+  cq2GuardarAgendaCliente(cliente, agenda);
+}
+
+async function cq2EjecutarAgendaPrivada() {
+  for (const cliente of store.listar()) {
+    if (!clienteValido(cliente)) continue;
+
+    try {
+      const agenda = cq2LeerAgendaCliente(cliente);
+      const ahora = Date.now();
+
+      const vencidas = agenda.schedules.filter(t =>
+        t && Number.isFinite(Number(t.ejecutarEn)) &&
+        Number(t.ejecutarEn) <= ahora &&
+        ['PAUSADA', 'ACTIVA'].includes(t.accion)
+      );
+
+      if (!vencidas.length) continue;
+
+      const perfiles = leerPerfiles(cliente);
+      const avisos = [];
+
+      for (const tarea of vencidas) {
+        const id = String(tarea.id || '');
+
+        if (id === 'todas' || id === 'todos') {
+          for (const [pid, perfil] of Object.entries(perfiles)) {
+            perfil.estado = tarea.accion;
+            perfil.ultima_hora = new Date().toISOString();
+            perfil.ultima_accion = 'Programacion ejecutada';
+            avisos.push([pid, perfil]);
+          }
+        } else if (Object.prototype.hasOwnProperty.call(perfiles,id)) {
+          const perfil = perfiles[id];
+          perfil.estado = tarea.accion;
+          perfil.ultima_hora = new Date().toISOString();
+          perfil.ultima_accion = 'Programacion ejecutada';
+          avisos.push([id, perfil]);
+        }
+      }
+
+      guardarPerfiles(cliente, perfiles);
+
+      // Retirar las tareas vencidas del mismo archivo del panel.
+      const actual = cq2LeerAgendaCliente(cliente);
+      const idsVencidos = new Set(vencidas.map(t =>
+        String(t.id) + '|' + t.accion + '|' + t.ejecutarEn
+      ));
+
+      actual.schedules = actual.schedules.filter(t =>
+        !idsVencidos.has(
+          String(t.id) + '|' + t.accion + '|' + t.ejecutarEn
+        )
+      );
+
+      cq2GuardarAgendaCliente(cliente, actual);
+
+      for (const [id, perfil] of avisos) {
+        await enviar(cliente, id, perfil, 'Programacion ejecutada');
+      }
+    } catch (e) {
+      console.error('[AGENDA CLIENTE TELEGRAM]', e.message);
+    }
+  }
+}
 async function cqMensajeHorario(m) {
   const chat = String(m?.chat?.id || '');
   const usuario = String(m?.from?.id || '');
@@ -650,13 +818,6 @@ async function cqMensajeHorario(m) {
   const texto = String(m.text || '').trim();
 
   if (/^CANCELAR$/i.test(texto)) {
-    estado.schedules = (estado.schedules || [])
-      .filter(t => !(
-        t.cliente_id === pendiente.cliente_id &&
-        t.perfil_id === pendiente.perfil_id &&
-        t.estado === pendiente.estado
-      ));
-
     delete estado.pendientes[clave];
     guardarEstado(estado);
 
@@ -668,7 +829,7 @@ async function cqMensajeHorario(m) {
     return;
   }
 
-  const ts = cqParseFecha(texto);
+  const ts = cq2FechaRDTelegram(texto);
 
   if (!ts) {
     await telegram('sendMessage', {
@@ -684,35 +845,24 @@ async function cqMensajeHorario(m) {
     return;
   }
 
-  estado.schedules = Array.isArray(estado.schedules)
-    ? estado.schedules
-    : [];
-
-  estado.schedules = estado.schedules.filter(t => !(
-    t.cliente_id === pendiente.cliente_id &&
-    t.perfil_id === pendiente.perfil_id &&
-    t.estado === pendiente.estado
-  ));
-
-  estado.schedules.push({
-    cliente_id: pendiente.cliente_id,
-    perfil_id: pendiente.perfil_id,
-    estado: pendiente.estado,
-    ejecutar: ts
-  });
-
+  cq2ProgramarClienteTelegram(
+    cliente,
+    pendiente.perfil_id,
+    pendiente.estado,
+    ts
+  );
   delete estado.pendientes[clave];
   guardarEstado(estado);
 
   await telegram('sendMessage', {
     chat_id: chat,
     text:
-      'Programaci?n guardada:\n' +
+      'PROGRAMACION GUARDADA\nPerfil: ' + pendiente.perfil_id + '\n' +
       (pendiente.estado === 'PAUSADA'
         ? 'PAUSAR'
         : 'REANUDAR') +
       '\n' +
-      new Date(ts).toLocaleString('es-DO')
+      cq2FechaLegibleRD(ts)
   });
 }
 
@@ -965,6 +1115,7 @@ async function ejecutarProgramaciones() {
     estado.schedules = pendientes;
     guardarEstado(estado);
   }
+  await cq2EjecutarAgendaPrivada();
 }
 
 async function revisar() {
