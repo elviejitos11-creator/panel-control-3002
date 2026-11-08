@@ -453,7 +453,30 @@ async function enviarFotoReal(chatId, imagen, caption, botones) {
   }
 }
 
+// CQ2_TELEGRAM_HORA_RD_AVISO_UNICO_V1
+const cq2AvisosRecientes = new Map();
+
 async function enviar(cliente, id, perfil, accion) {
+  const tipo = String(accion || '');
+  const controlar = /paus|reanud|programaci/i.test(tipo);
+
+  if (controlar) {
+    const claveAviso = cliente.id + ':' + id;
+    const anterior = cq2AvisosRecientes.get(claveAviso);
+
+    if (anterior &&
+        anterior.tipo === tipo &&
+        anterior.estado === perfil.estado &&
+        Date.now() - anterior.fecha < 12000) {
+      return true;
+    }
+
+    cq2AvisosRecientes.set(claveAviso, {
+      tipo: tipo,
+      estado: perfil.estado,
+      fecha: Date.now()
+    });
+  }
   if (!clienteValido(cliente)) return false;
 
   const chatId = String(perfil.chat_id || '');
@@ -523,19 +546,16 @@ function cqParseFecha(entrada) {
   const texto = String(entrada || '')
     .trim()
     .toUpperCase()
-    .replace(/\u00D1/g, 'N')
-    .replace(/\?/g, 'N')
+    .replace(/\u00d1/g, 'N')
     .replace(/\s+/g, ' ');
 
-  const patron = /^(?:(HOY|MANANA)\s+)?(?:(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)?$/;
-
-  const m = texto.match(patron);
+  const m = /^(?:(HOY|MANANA)\s+)?(?:(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)?$/.exec(texto);
   if (!m) return null;
 
-  const ahora = new Date();
-  const dia = m[2] ? Number(m[2]) : null;
-  const mes = m[3] ? Number(m[3]) : null;
-  const anio = m[4] ? Number(m[4]) : null;
+  const ahora = new Date(Date.now() - 14400000);
+  let y = ahora.getUTCFullYear();
+  let mes = ahora.getUTCMonth() + 1;
+  let dia = ahora.getUTCDate();
 
   let hora = Number(m[5]);
   const minuto = Number(m[6]);
@@ -545,50 +565,57 @@ function cqParseFecha(entrada) {
 
   if (periodo) {
     if (hora < 1 || hora > 12) return null;
-    hora = hora % 12;
-    if (periodo === 'PM') hora += 12;
+    hora = (hora % 12) + (periodo === 'PM' ? 12 : 0);
   } else if (hora > 23) {
     return null;
   }
 
-  let fecha;
-
-  if (dia !== null) {
-    const year = anio || ahora.getFullYear();
-    fecha = new Date(year, mes - 1, dia, hora, minuto);
-
-    if (
-      fecha.getFullYear() !== year ||
-      fecha.getMonth() !== mes - 1 ||
-      fecha.getDate() !== dia ||
-      fecha.getHours() !== hora ||
-      fecha.getMinutes() !== minuto
-    ) return null;
-
-    if (anio === null && fecha <= ahora) {
-      fecha = new Date(year + 1, mes - 1, dia, hora, minuto);
-    }
-  } else {
-    fecha = new Date(ahora);
-
-    if (m[1] === 'MANANA') {
-      fecha.setDate(fecha.getDate() + 1);
-    }
-
-    fecha.setHours(hora, minuto, 0, 0);
-
-    if (!m[1] && fecha <= ahora) {
-      fecha.setDate(fecha.getDate() + 1);
-    }
+  if (m[2]) {
+    dia = Number(m[2]);
+    mes = Number(m[3]);
+    if (m[4]) y = Number(m[4]);
   }
 
-  const ts = fecha.getTime();
+  if (m[1] === 'MANANA') {
+    const siguiente = new Date(Date.UTC(y, mes - 1, dia + 1));
+    y = siguiente.getUTCFullYear();
+    mes = siguiente.getUTCMonth() + 1;
+    dia = siguiente.getUTCDate();
+  }
 
-  if (
-    !Number.isFinite(ts) ||
-    ts <= Date.now() ||
-    ts > Date.now() + 366 * 86400000
-  ) return null;
+  const calcular = () =>
+    Date.UTC(y, mes - 1, dia, hora + 4, minuto);
+
+  let ts = calcular();
+
+  if (!m[1] && !m[4] && ts <= Date.now()) {
+    if (m[2]) {
+      y++;
+    } else {
+      const siguiente = new Date(
+        Date.UTC(y, mes - 1, dia + 1)
+      );
+      y = siguiente.getUTCFullYear();
+      mes = siguiente.getUTCMonth() + 1;
+      dia = siguiente.getUTCDate();
+    }
+    ts = calcular();
+  }
+
+  const ver = new Date(ts - 14400000);
+
+  if (ver.getUTCFullYear() !== y ||
+      ver.getUTCMonth() + 1 !== mes ||
+      ver.getUTCDate() !== dia ||
+      ver.getUTCHours() !== hora ||
+      ver.getUTCMinutes() !== minuto) {
+    return null;
+  }
+
+  if (ts <= Date.now() ||
+      ts > Date.now() + 366 * 86400000) {
+    return null;
+  }
 
   return ts;
 }
