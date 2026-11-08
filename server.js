@@ -102,6 +102,115 @@ require('./cliente_api')(app, {
     })
 });
 
+// CQ2_ENRUTAR_PERFILES_CLIENTE_EXTENSION_V1
+// Localizar el propietario del ID y reutilizar el motor existente.
+// No modifica tokens, licencias ni funciones de Screen.
+app.use((req, res, next) => {
+  const ruta = req.path || '';
+  const metodo = req.method;
+
+  const api = metodo === 'GET' &&
+    /^\/api\/(?:estado|licencia)\/[A-Za-z0-9_-]{1,40}\/?$/.test(ruta);
+
+  const evento = metodo === 'POST' &&
+    ruta === '/registrar-evento';
+
+  const accion = metodo === 'POST' &&
+    ruta === '/accion' &&
+    /^https:\/\/(?:[a-z0-9-]+\.)*megapersonals\.eu$/i.test(
+      String(req.get('origin') || '')
+    );
+
+  if (!api && !evento && !accion) return next();
+
+  const id = String(
+    api ? ruta.split('/')[3] : (req.body?.id || '')
+  ).trim();
+
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+    return next();
+  }
+
+  try {
+    const store = require('./clientes_store');
+    const raiz = process.env.DATA_DIR ||
+      process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+      __dirname;
+
+    // Evitar que el ID de un cliente se confunda con
+    // un perfil principal.
+    const principal = path.join(raiz, 'data.json');
+    let existePrincipal = false;
+
+    if (fs.existsSync(principal)) {
+      const datos = JSON.parse(
+        fs.readFileSync(principal, 'utf8')
+      );
+      existePrincipal =
+        Object.prototype.hasOwnProperty.call(datos, id);
+    }
+
+    const encontrados = [];
+
+    for (const cliente of store.listar()) {
+      const archivo = path.join(
+        store.carpetaCliente(cliente.id),
+        'data.json'
+      );
+
+      if (!fs.existsSync(archivo)) continue;
+
+      const datos = JSON.parse(
+        fs.readFileSync(archivo, 'utf8')
+      );
+
+      if (Object.prototype.hasOwnProperty.call(datos,id)) {
+        encontrados.push(cliente);
+      }
+    }
+
+    // No mezclar perfiles si hay IDs repetidos.
+    if (encontrados.length > 1 ||
+        (existePrincipal && encontrados.length > 0)) {
+      console.error('[CQ2 ID DUPLICADO]', id);
+      return res.status(409).json({
+        ok:false,
+        estado:'ID_DUPLICADO'
+      });
+    }
+
+    // Los perfiles principales siguen trabajando igual.
+    if (existePrincipal || encontrados.length === 0) {
+      return next();
+    }
+
+    const cliente = encontrados[0];
+
+    // Una cuenta suspendida o vencida no puede operar.
+    if (!cliente.activo ||
+        !Number.isFinite(Date.parse(cliente.vencimiento)) ||
+        Date.parse(cliente.vencimiento) <= Date.now()) {
+      return res.status(403).json({
+        ok:false,
+        estado:'CLIENTE_INACTIVO'
+      });
+    }
+
+    // El mismo motor original ahora lee y escribe
+    // en el almacenamiento del propietario del perfil.
+    return app.locals.cq2ConCliente(
+      cliente,
+      () => next()
+    );
+  } catch (error) {
+    console.error('[CQ2 PERFIL CLIENTE]',error.message);
+    return res.status(500).json({
+      ok:false,
+      estado:'ERROR_AL_CONSULTAR_PERFIL'
+    });
+  }
+});
+// FIN CQ2_ENRUTAR_PERFILES_CLIENTE_EXTENSION_V1
 // Primero el acceso; despues la administracion.
 // CQ2_CORS_ORIGINAL_V2
 // Comunicacion del motor con el servidor original.
