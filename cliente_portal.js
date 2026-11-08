@@ -237,93 +237,92 @@ module.exports = function(app) {
   });
 
   app.use('/cliente',exigirSesion);
-  // CQ2_REPARACION_DIRECTA_V5
-  // Solo editar y generar clave del cliente autenticado.
-  app.use('/cliente', (req,res,next) => {
-    const ruta = req.path;
-    const metodo = req.method;
+  // CQ2_CLIENTE_EDICION_Y_CLAVE_UNICA_V6
 
-    const editar = metodo === 'GET' &&
-      (/^\/editar(?:-perfil)?\/[A-Za-z0-9_-]{1,40}$/.test(ruta) ||
-       ruta === '/editar');
+  // Conectar los botones de la pantalla original
+  // exclusivamente a las funciones privadas del cliente.
+  app.use('/cliente',(req,res,next)=>{
+    if(req.method !== 'GET' || req.path !== '/') {
+      return next();
+    }
 
-    const clave = metodo === 'POST' &&
-      ruta === '/clave-perfil';
+    const enviar = res.send.bind(res);
 
-    if (!editar && !clave) return next();
-
-    res.setHeader('Cache-Control','no-store');
-
-    try {
-      if (!req.cliente || !req.cliente.id) {
-        return res.sendStatus(403);
+    res.send = function(html) {
+      if(typeof html !== 'string' ||
+         !/<\/body>/i.test(html)) {
+        return enviar(html);
       }
 
-      const id = editar
-        ? String(ruta === '/editar'
-            ? (req.query.id || '')
-            : ruta.split('/').pop())
-        : String((req.body && req.body.id) || '');
+      html = html.replace(
+        /href="\/cliente\/editar(?:-perfil)?\/([A-Za-z0-9_-]+)"/g,
+        (m,id) => 'href="/cliente/editar-final/' + id + '"'
+      );
 
-      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+      html = html.replace(
+        /onclick="cq2GenerarClaveCliente\('([A-Za-z0-9_-]+)'\)"/g,
+        (m,id) => 'onclick="cq2ClaveSegura(\'' + id + '\')"'
+      );
+
+      const csrf = JSON.stringify(String(req.csrfCliente || ''));
+
+      const script = `<script>
+      function cq2ClaveSegura(id) {
+        if(!confirm(
+          'Generar nueva clave para perfil ' + id +
+          '? La clave anterior dejara de funcionar.'
+        )) return;
+
+        const f = document.createElement('form');
+        f.method = 'POST';
+        f.action = '/cliente/clave-final';
+
+        for(const par of [
+          ['id',id],
+          ['_csrf',${csrf}]
+        ]) {
+          const i = document.createElement('input');
+          i.type = 'hidden';
+          i.name = par[0];
+          i.value = par[1];
+          f.appendChild(i);
+        }
+
+        document.body.appendChild(f);
+        f.submit();
+      }
+      </script>`;
+
+      res.setHeader('Cache-Control','no-store');
+      return enviar(
+        html.replace(/<\/body>/i,script+'</body>')
+      );
+    };
+
+    next();
+  });
+
+  // Formulario de edicion del cliente autenticado.
+  app.get('/cliente/editar-final/:id',(req,res)=>{
+    try {
+      const id = String(req.params.id || '');
+      if(!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
         return res.status(400).send('ID invalido');
       }
 
       const datos = leerPerfiles(req.cliente.id);
-
-      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
-        return res.status(404).type('text/plain').send(
-          'DIAGNOSTICO EDITAR CLIENTE' +
-          '\nID solicitado: ' + id +
-          '\nIDs disponibles: ' +
-          Object.keys(datos).join(', ') +
-          '\nRuta: ' + req.originalUrl +
-          '\nProceso: ' + process.pid
-        );
-      }
-
-      if (clave) {
-        const sesion = sesiones.get(cookie(req));
-
-        if (!sesion || !req.body ||
-            req.body._csrf !== sesion.csrf) {
-          return res.sendStatus(403);
-        }
-
-        const archivo = archivoCliente(req.cliente.id);
-        fs.copyFileSync(
-          archivo,
-          archivo + '.before-key-' + Date.now() + '.bak'
-        );
-
-        const nueva = require('crypto')
-          .randomBytes(24).toString('hex');
-
-        datos[id].cliente_token = nueva;
-        guardarPerfiles(req.cliente.id,datos);
-
-        return res.status(200).json({
-          ok:true,
-          perfil:id,
-          clave:nueva
-        });
+      if(!Object.prototype.hasOwnProperty.call(datos,id)) {
+        return res.status(404).send('Perfil no encontrado');
       }
 
       const p = datos[id];
-      const esc = v => String(v == null ? '' : v)
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;')
-        .replace(/'/g,'&#39;');
-
       const campo = (titulo,nombre,valor) =>
         '<label style="display:block;margin:12px 0">' +
         '<b>' + esc(titulo) + '</b>' +
         '<input name="' + esc(nombre) + '" value="' +
         esc(valor) + '" style="width:100%" /></label>';
 
-      const html =
+      const contenido =
         '<div class="card">' +
         '<h2>Editar perfil ' + esc(id) + '</h2>' +
         '<form method="POST" action="/cliente/guardar-edicion">' +
@@ -336,154 +335,64 @@ module.exports = function(app) {
         campo('Codigo','codigo',p.codigo) +
         campo('Ubicacion','ubicacion',p.ubicacion) +
         '<label><b>Texto</b>' +
-        '<textarea name="texto" rows="6" ' +
-        'style="width:100%">' +
-        esc(p.texto) + '</textarea></label>' +
-        '<p>Token, fotos y contadores se conservan.</p>' +
-        '<button type="submit">Guardar cambios</button>' +
-        '<a class="btn" href="/cliente">Volver</a>' +
-        '</form></div>';
-
-      return res.status(200).send(
-        pagina('Editar perfil',html)
-      );
-
-    } catch(e) {
-      console.error('[CQ2 DIRECTO V5]',e.message);
-      return res.status(500).send(
-        'Error procesando perfil del cliente'
-      );
-    }
-  });
-
-  // CQ2_EDITAR_DIRECTO_V4
-  app.get('/cliente/editar-perfil/:id', (req,res) => {
-    try {
-      const id = String(req.params.id || '');
-
-      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
-        return res.status(400).send('ID invalido');
-      }
-
-      const datos = leerPerfiles(req.cliente.id);
-
-      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
-        return res.status(404).send('Perfil no encontrado');
-      }
-
-      const p = datos[id];
-
-      const esc = v => String(v == null ? '' : v)
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;')
-        .replace(/'/g,'&#39;');
-
-      const campo = (titulo,nombre,valor) =>
-        '<label><b>' + esc(titulo) + '</b>' +
-        '<input name="' + esc(nombre) + '" value="' +
-        esc(valor) + '" required></label>';
-
-      const contenido =
-        '<div class="card">' +
-        '<h2>Editar perfil ' + esc(id) + '</h2>' +
-        '<form method="POST" action="/cliente/guardar-edicion">' +
-        campoCsrf(req) +
-        '<input type="hidden" name="id" value="' + esc(id) + '">' +
-        campo('Nombre','nombre',p.nombre) +
-        campo('Chat ID','chat_id',p.chat_id) +
-        campo('Telefono','telefono',p.telefono) +
-        campo('Codigo','codigo',p.codigo) +
-        campo('Ubicacion','ubicacion',p.ubicacion) +
-        '<label><b>Texto</b>' +
         '<textarea name="texto" rows="6" style="width:100%">' +
         esc(p.texto) + '</textarea></label>' +
-        '<p>La clave y los contadores no se modifican.</p>' +
+        '<p>Clave, fotos y contadores se conservan.</p>' +
         '<button type="submit">Guardar cambios</button>' +
         '<a class="btn" href="/cliente">Volver</a>' +
         '</form></div>';
 
       res.setHeader('Cache-Control','no-store');
       return res.send(pagina('Editar perfil',contenido));
-
     } catch(e) {
-      console.error('[EDITAR CLIENTE]',e.message);
-      return res.status(500).send('Error abriendo perfil');
+      console.error('[CQ2 EDITAR FINAL]',e.message);
+      return res.sendStatus(500);
     }
   });
 
+  // Generar la clave solamente por accion voluntaria.
+  // No borrar fotos, datos ni contadores.
+  app.post('/cliente/clave-final',(req,res)=>{
+    try {
+      const id = String(req.body.id || '');
+      if(!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+        return res.sendStatus(400);
+      }
 
-function cqEscapar(v) {
-  return String(v == null ? '' : v)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+      const datos = leerPerfiles(req.cliente.id);
+      if(!Object.prototype.hasOwnProperty.call(datos,id)) {
+        return res.sendStatus(404);
+      }
 
-app.get(['/cliente/editar', '/cliente/editar/:id'], (req, res) => {
-  if (!req.cliente || !req.cliente.id) {
-    return res.status(403).send('Acceso no autorizado');
-  }
+      const archivo = archivoCliente(req.cliente.id);
+      fs.copyFileSync(
+        archivo,
+        archivo + '.before-key-' + Date.now() + '.bak'
+      );
 
-  const id = String(req.params.id || req.query.id || '').trim();
-  if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
-    return res.status(400).send('ID invalido');
-  }
-  const datos = leerPerfiles(req.cliente.id);
+      const clave = crypto.randomBytes(24).toString('hex');
+      datos[id].cliente_token = clave;
+      guardarPerfiles(req.cliente.id,datos);
 
-  if (!Object.prototype.hasOwnProperty.call(datos, id)) {
-    return res.status(404).send('Perfil no encontrado');
-  }
+      res.setHeader('Cache-Control','no-store');
+      res.setHeader('Referrer-Policy','no-referrer');
 
-  const p = datos[id];
-
-  const campo = (titulo, nombre, valor) =>
-    '<label style="display:block;margin-top:14px">' +
-      '<b>' + cqEscapar(titulo) + '</b>' +
-      '<input style="display:block;width:100%;box-sizing:border-box;' +
-      'padding:12px;margin-top:6px" name="' +
-      cqEscapar(nombre) + '" value="' +
-      cqEscapar(valor) + '" />' +
-    '</label>';
-
-  const contenido =
-    '<div class="card">' +
-    '<h2>✏️ Editar perfil ' + cqEscapar(id) + '</h2>' +
-    '<form method="POST" action="/cliente/guardar-edicion">' +
-    campoCsrf(req) +
-    '<input type="hidden" name="id" value="' +
-      cqEscapar(id) + '">' +
-
-    campo('Nombre', 'nombre', p.nombre) +
-    campo('Chat ID', 'chat_id', p.chat_id) +
-    campo('Telefono', 'telefono', p.telefono) +
-    campo('Codigo', 'codigo', p.codigo) +
-    campo('Ubicacion', 'ubicacion', p.ubicacion) +
-
-    '<label style="display:block;margin-top:14px">' +
-    '<b>Texto</b>' +
-    '<textarea name="texto" rows="5" ' +
-      'style="display:block;width:100%;box-sizing:border-box;' +
-      'padding:12px;margin-top:6px">' +
-    cqEscapar(p.texto) +
-    '</textarea></label>' +
-
-    '<p>El token del perfil se conserva sin cambios.</p>' +
-
-    '<div style="margin-top:20px">' +
-    '<button type="submit">Guardar cambios</button> ' +
-    '<a href="/cliente">Volver</a>' +
-    '</div></form></div>';
-
-  return res.send(pagina('Editar perfil', contenido));
-});
-
-
-
-
+      return res.send(pagina('Clave generada',
+        '<div class="card">' +
+        '<h2>Clave del perfil ' + esc(id) + '</h2>' +
+        '<p>Copia y guarda esta clave:</p>' +
+        '<input readonly value="' + esc(clave) +
+        '" style="width:100%;font-size:15px" ' +
+        'onclick="this.select()" />' +
+        '<p>La clave anterior deja de funcionar.</p>' +
+        '<a class="btn" href="/cliente">Volver al panel</a>' +
+        '</div>'
+      ));
+    } catch(e) {
+      console.error('[CQ2 CLAVE FINAL]',e.message);
+      return res.sendStatus(500);
+    }
+  });
 
   // CQ2_BORRADO_CLIENTE_FINAL_V1
   app.post('/cliente/cq-borrar-seguro',(req,res)=>{
@@ -518,44 +427,6 @@ app.get(['/cliente/editar', '/cliente/editar/:id'], (req, res) => {
     }
   });
 
-  // CQ2_GENERAR_CLAVE_CLIENTE_V2
-  app.post('/cliente/clave-perfil', (req,res) => {
-    try {
-      const s = sesiones.get(cookie(req));
-      if (!req.cliente || !s ||
-          !req.body || req.body._csrf !== s.csrf) {
-        return res.sendStatus(403);
-      }
-
-      const id = String(req.body.id || '');
-      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
-        return res.sendStatus(400);
-      }
-
-      const datos = leerPerfiles(req.cliente.id);
-      if (!Object.prototype.hasOwnProperty.call(datos,id)) {
-        return res.sendStatus(404);
-      }
-
-      const archivo = archivoCliente(req.cliente.id);
-      fs.copyFileSync(
-        archivo,
-        archivo + '.before-key-' + Date.now() + '.bak'
-      );
-
-      const clave = require('crypto')
-        .randomBytes(24).toString('hex');
-
-      datos[id].cliente_token = clave;
-      guardarPerfiles(req.cliente.id,datos);
-
-      res.setHeader('Cache-Control','no-store');
-      return res.json({ok:true,perfil:id,clave:clave});
-    } catch(e) {
-      console.error('[CLAVE CLIENTE]',e.message);
-      return res.sendStatus(500);
-    }
-  });
   // CQ2_UN_PANEL_RUTAS_ORIGINALES_V1
   app.use('/cliente', (req,res,next) => {
     const ruta = req.path;
@@ -1122,7 +993,7 @@ app.post('/cliente/guardar-edicion', (req, res) => {
     return res.status(400).send('Nombre invalido');
   }
 
-  if (!/^-?[0-9]{5,20}$/.test(nuevos.chat_id)) {
+  if (nuevos.chat_id && !/^-?[0-9]{5,20}$/.test(nuevos.chat_id)) {
     return res.status(400).send('Chat ID invalido');
   }
 
