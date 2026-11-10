@@ -2097,6 +2097,74 @@ app.post('/registrar-evento', async (req, res) => {
 // =========================
 // TELEGRAM CALLBACKS
 // =========================
+// CQ2_TELEGRAM_PROGRAMACION_VISUAL_V10
+function cq2VistaProgramacionTelegram(id, accion, guardada = null) {
+  const state = leerState();
+  const data = leerData();
+  const perfil = data[String(id)] || {};
+  const ahora = Date.now();
+
+  const tareas = Array.isArray(state.schedules)
+    ? state.schedules.filter(t =>
+        t &&
+        String(t.id) === String(id) &&
+        Number(t.ejecutarEn) > ahora
+      )
+    : [];
+
+  const horaRD = ts => new Date(Number(ts))
+    .toLocaleString('es-DO', {
+      timeZone: 'America/Santo_Domingo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+  const siguiente = tipo => {
+    const lista = tareas.filter(t => t.accion === tipo)
+      .sort((a, b) => Number(a.ejecutarEn) -
+        Number(b.ejecutarEn));
+
+    return lista.length
+      ? horaRD(lista[0].ejecutarEn)
+      : 'No programado';
+  };
+
+  const nombreAccion = accion === 'PAUSADA'
+    ? '⏸ PAUSAR'
+    : '▶️ REANUDAR';
+
+  const titulo = guardada === null
+    ? '⏰ PROGRAMACIÓN'
+    : '✅ PROGRAMACIÓN GUARDADA';
+
+  let texto =
+    titulo +
+    '\n\n👤 Perfil: ' + id +
+    '\nAcción: ' + nombreAccion +
+    '\nEstado actual: ' + (perfil.estado || 'N/A');
+
+  if (guardada !== null) {
+    texto += '\n📅 Se ejecutará: ' + horaRD(guardada);
+  } else {
+    texto +=
+      '\n\n✍️ Escribe la fecha y hora:' +
+      '\nHOY 8:00 PM' +
+      '\nMAÑANA 2:00 AM' +
+      '\n06/11 5:00 PM' +
+      '\n\nEscribe CANCELAR para salir.';
+  }
+
+  texto +=
+    '\n\n⏰ PROGRAMACIONES ACTUALES' +
+    '\n⏸ Pausar: ' + siguiente('PAUSADA') +
+    '\n▶️ Reanudar: ' + siguiente('ACTIVA');
+
+  return texto;
+}
 async function procesarCallback(q) {
   const data = q.data || '';
   const callbackId = q.id;
@@ -2154,9 +2222,7 @@ async function procesarCallback(q) {
       return;
     }
     await responderCallback(callbackId, 'Indica fecha y hora');
-    await enviarTexto('Programar perfil ' + id +
-      '\nEscribe HOY 8:00 PM, MAÑANA 5:00 AM o 06/11 5:00 PM.' +
-      '\nCANCELAR para salir.', chatId);
+    await enviarTexto(cq2VistaProgramacionTelegram(id, 'PAUSADA'), chatId);
     return;
   }
 
@@ -2171,9 +2237,7 @@ async function procesarCallback(q) {
       return;
     }
     await responderCallback(callbackId, 'Indica fecha y hora');
-    await enviarTexto('Programar perfil ' + id +
-      '\nEscribe HOY 8:00 PM, MAÑANA 5:00 AM o 06/11 5:00 PM.' +
-      '\nCANCELAR para salir.', chatId);
+    await enviarTexto(cq2VistaProgramacionTelegram(id, 'ACTIVA'), chatId);
     return;
   }
 
@@ -2256,13 +2320,7 @@ async function revisarTelegram() {
               const s = leerState();
               delete s.cq2EsperandoHora[String(chatId)];
               guardarState(s);
-              await enviarTexto(
-                'Programacion guardada. Perfil: ' + pendiente.id +
-                '\nAccion: ' + pendiente.accion +
-                '\nHora RD: ' + new Date(ts).toLocaleString(
-                  'es-DO', {timeZone:'America/Santo_Domingo'}
-                ), chatId
-              );
+              await enviarTexto(cq2VistaProgramacionTelegram(pendiente.id, pendiente.accion, ts), chatId);
             } catch (e) {
               await enviarTexto(
                 'Hora incorrecta: ' + e.message +
@@ -2354,7 +2412,7 @@ async function ejecutarProgramaciones() {
       await enviarTexto(
         `⏰ Programación ejecutada\nPerfil: ${item.id}\nNuevo estado: ${item.accion}`
       );
-      await enviarEstadoPerfil(item.id);
+      /* Aviso unico de programacion: texto anterior */
     } else {
       pendientes.push(item);
     }
