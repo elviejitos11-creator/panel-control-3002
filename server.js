@@ -16,6 +16,24 @@ try {
 }
 
 const app = express();
+// CQ2_APPLE_ICONO_RAIZ_V1
+// Icono publico para Safari y pantalla de inicio del iPhone.
+app.get([
+  '/apple-touch-icon.png',
+  '/apple-touch-icon-precomposed.png'
+], (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.type('png').sendFile(
+    require('path').join(
+      __dirname,
+      'public',
+      'img',
+      'apple-touch-icon.png'
+    )
+  );
+});
+// FIN CQ2_APPLE_ICONO_RAIZ_V1
+
 // CQ2_ID_GLOBAL_FINAL_V2
 const cq2IdExiste = require('./cq2_id_unico');
 

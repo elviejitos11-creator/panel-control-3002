@@ -54,7 +54,7 @@ background:linear-gradient(90deg,#087fff,#b91de8);
 border:0;border-radius:11px;font-size:16px;font-weight:bold}
 .error{color:#ff9393}
 </style>
-<link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2">
 <link rel="icon" type="image/png" href="/img/postbot-icono.png">
 <link rel="manifest" href="/manifest.webmanifest">
 </head>
