@@ -101,6 +101,95 @@ function cq2PerfilesDelGrupo(datos,chatId) {
   );
 }
 
+
+/* CQ2_COLA_GRUPO_45S_V1 */
+const cq2ColasPorGrupo=new Map();
+
+function cq2ClaveGrupo(cliente,chatId) {
+  return String(cliente.id)+'|'+String(chatId);
+}
+
+function cq2CancelarColaGrupo(cliente,chatId) {
+  const clave=cq2ClaveGrupo(cliente,chatId);
+  const cola=cq2ColasPorGrupo.get(clave);
+  if(cola) {
+    cola.cancelada=true;
+    if(cola.timer)clearTimeout(cola.timer);
+    cq2ColasPorGrupo.delete(clave);
+  }
+}
+
+function cq2PerfilConPlanVencido(perfil) {
+  if(!perfil)return true;
+  const raw=String(perfil.fin_plan||'').trim();
+  if(/^0\s*d[ií]as?\b/i.test(raw))return true;
+  if(!raw)return false;
+  const fecha=Date.parse(raw);
+  return Number.isFinite(fecha) && fecha<=Date.now();
+}
+
+function cq2IniciarColaGrupo(cliente,chatId) {
+  const chat=String(chatId);
+  const clave=cq2ClaveGrupo(cliente,chat);
+  if(cq2ColasPorGrupo.has(clave)) {
+    return {iniciada:false,existente:true,cantidad:0};
+  }
+
+  const datos=leerPerfiles(cliente);
+  const ids=cq2PerfilesDelGrupo(datos,chat)
+    .filter(([id,p])=>!cq2PerfilConPlanVencido(p))
+    .map(([id])=>id);
+
+  if(!ids.length) {
+    return {iniciada:false,existente:false,cantidad:0};
+  }
+
+  const cola={ids,indice:0,cancelada:false,timer:null};
+  cq2ColasPorGrupo.set(clave,cola);
+
+  const siguiente=async()=>{
+    if(cola.cancelada || cq2ColasPorGrupo.get(clave)!==cola)return;
+
+    try {
+      if(!clienteValido(cliente)) {
+        cq2CancelarColaGrupo(cliente,chat);
+        return;
+      }
+
+      const id=cola.ids[cola.indice++];
+      const actuales=leerPerfiles(cliente);
+      const perfil=actuales[id];
+
+      if(perfil &&
+         String(perfil.chat_id||'')===chat &&
+         !cq2PerfilConPlanVencido(perfil)) {
+        perfil.estado='ACTIVA';
+        perfil.ultima_hora=new Date().toISOString();
+        perfil.ultima_accion='Reanudado en cola por Chat ID';
+        guardarPerfiles(cliente,actuales);
+        await enviar(cliente,id,perfil,perfil.ultima_accion);
+      }
+
+      if(cola.cancelada || cq2ColasPorGrupo.get(clave)!==cola)return;
+
+      if(cola.indice<cola.ids.length) {
+        cola.timer=setTimeout(()=>{
+          void siguiente();
+        },45000);
+      } else {
+        cq2ColasPorGrupo.delete(clave);
+      }
+    }catch(error) {
+      console.error('[CQ2 COLA CHAT ID]',error.message);
+      cq2CancelarColaGrupo(cliente,chat);
+    }
+  };
+
+  void siguiente();
+  return {iniciada:true,existente:false,cantidad:ids.length};
+}
+/* FIN CQ2_COLA_GRUPO_45S_V1 */
+
 function buscarPerfil(hash, chatId) {
   for (const cliente of store.listar()) {
     if (!clienteValido(cliente)) continue;
@@ -1019,39 +1108,52 @@ async function procesar(q) {
   }
 
   if (accion === 'P' || accion === 'R') {
-    const estado = accion === 'P'
-      ? 'PAUSADA'
-      : 'ACTIVA';
+    const chat=String(q.message?.chat?.id||'');
+    const grupo=cq2PerfilesDelGrupo(datos,chat);
 
-    // Solo perfiles de este cliente y este Chat ID.
-    const perfilesGrupo=cq2PerfilesDelGrupo(
-      datos,q.message?.chat?.id
-    );
-
-    if(!perfilesGrupo.length) {
+    if(!grupo.length) {
       await responder(q,'No hay perfiles de este grupo');
       return;
     }
 
-    for (const [idPerfil,perfilActual] of perfilesGrupo) {
-      perfilActual.estado = estado;
-      perfilActual.ultima_hora =
-        new Date().toISOString();
+    if(accion==='P') {
+      cq2CancelarColaGrupo(cliente,chat);
+      for(const [pid,p] of grupo) {
+        p.estado='PAUSADA';
+        p.ultima_hora=new Date().toISOString();
+        p.ultima_accion='Pausado por grupo de Telegram';
+      }
+      guardarPerfiles(cliente,datos);
+      await responder(q,'Perfiles del grupo pausados');
+      await telegram('sendMessage',{
+        chat_id:chat,
+        text:'⏸ Se pausaron '+grupo.length+
+          ' perfiles de este grupo. Cola cancelada.'
+      });
+      return;
     }
 
-    guardarPerfiles(cliente, datos);
+    const cola=cq2IniciarColaGrupo(cliente,chat);
+    if(cola.existente) {
+      await responder(q,'Ya existe una cola activa para este grupo');
+      return;
+    }
 
-    await responder(q, 'Perfiles actualizados');
+    if(!cola.iniciada) {
+      await responder(q,'No hay perfiles pendientes vigentes');
+      await telegram('sendMessage',{
+        chat_id:chat,
+        text:'ℹ️ No hay perfiles pendientes y vigentes para reanudar en este grupo.'
+      });
+      return;
+    }
 
-    await telegram('sendMessage', {
-      chat_id: q.message.chat.id,
-      text: (estado==='PAUSADA'
-        ? '⏸ Se pausaron '
-        : '▶️ Se reanudaron ') +
-        perfilesGrupo.length +
-        ' perfiles de este grupo.'
+    await responder(q,'Cola iniciada');
+    await telegram('sendMessage',{
+      chat_id:chat,
+      text:'▶️ Reanudando '+cola.cantidad+
+        ' perfiles de este grupo, uno cada 45 segundos.'
     });
-
     return;
   }
 
