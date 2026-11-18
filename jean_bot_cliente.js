@@ -89,6 +89,18 @@ function hashPerfil(cliente, id) {
     .slice(0, 24);
 }
 
+
+/* CQ2_GRUPO_CHAT_ID_ESTRICTO_V1 */
+function cq2PerfilesDelGrupo(datos,chatId) {
+  const chat=String(chatId||'').trim();
+  if(!chat || !/^-?\d{5,20}$/.test(chat))return [];
+
+  return Object.entries(datos).filter(([id,perfil])=>
+    perfil &&
+    String(perfil.chat_id||'').trim()===chat
+  );
+}
+
 function buscarPerfil(hash, chatId) {
   for (const cliente of store.listar()) {
     if (!clienteValido(cliente)) continue;
@@ -256,14 +268,14 @@ function mensaje(cliente, id, perfil, accion) {
 
   const estado = valor(perfil.estado);
 
-  const titulo = '\u{1f525} JEAN__BOT CLIENTE \u{1f525}';
+  const titulo = '🔥 jean calos BOT 🔥';
 
   const lineas = [
     titulo,
     '',
-    '\u{1f464} ' + valor(cliente.nombre, 'Cliente'),
-    '\u{1f194} ' + valor(perfil.nombre, 'Perfil ' + id),
-    '\u{1f514} ' + valor(accion),
+    '👤 Cliente: ' + valor(cliente.nombre, 'Cliente'),
+    '🆔 Perfil: ' + valor(perfil.nombre, 'Perfil ' + id),
+    '🔔 Acción: ' + valor(accion),
     '',
     '\u{1f4de} N\u00famero: ' + valor(perfil.telefono),
     '\u{1f194} C\u00f3digo: ' + valor(perfil.codigo),
@@ -1011,7 +1023,17 @@ async function procesar(q) {
       ? 'PAUSADA'
       : 'ACTIVA';
 
-    for (const perfilActual of Object.values(datos)) {
+    // Solo perfiles de este cliente y este Chat ID.
+    const perfilesGrupo=cq2PerfilesDelGrupo(
+      datos,q.message?.chat?.id
+    );
+
+    if(!perfilesGrupo.length) {
+      await responder(q,'No hay perfiles de este grupo');
+      return;
+    }
+
+    for (const [idPerfil,perfilActual] of perfilesGrupo) {
       perfilActual.estado = estado;
       perfilActual.ultima_hora =
         new Date().toISOString();
@@ -1023,7 +1045,11 @@ async function procesar(q) {
 
     await telegram('sendMessage', {
       chat_id: q.message.chat.id,
-      text: '? Perfiles del cliente: ' + estado
+      text: (estado==='PAUSADA'
+        ? '⏸ Se pausaron '
+        : '▶️ Se reanudaron ') +
+        perfilesGrupo.length +
+        ' perfiles de este grupo.'
     });
 
     return;
