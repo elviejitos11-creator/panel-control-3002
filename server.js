@@ -1315,6 +1315,7 @@ function tiempoRestantePlan(fechaFin) {
 function planVencido(perfil) {
   if (!perfil || !perfil.fin_plan) return false;
 
+  if (/^0\s*d[ií]as?\b/i.test(String(perfil.fin_plan).trim())) return true;
   const fin = new Date(perfil.fin_plan);
 
   if (isNaN(fin.getTime())) return false;
@@ -1338,9 +1339,13 @@ function convertirFinPlan(valor) {
     return valor;
   }
 
-  const m = texto.match(/^(\d+)\s*d[ií]a?s?$/);
+  const m = texto.match(/^(\d+)\s*d[ií]a?s?(?:\s*(?:y\s*)?(\d+)\s*horas?)?(?:\s*(?:y\s*)?(\d+)\s*minutos?)?$/);
   if (m) {
     const dias = Number(m[1]);
+    const horas = Number(m[2] || 0);
+    const minutos = Number(m[3] || 0);
+    if (dias === 0) return new Date(Date.now()-1000).toISOString();
+    if (horas || minutos) return new Date(Date.now()+dias*86400000+horas*3600000+minutos*60000).toISOString();
     const fecha = new Date();
     fecha.setDate(fecha.getDate() + dias);
     fecha.setHours(23, 59, 59, 0);
@@ -1560,6 +1565,7 @@ function cambiarEstadoPerfil(id, estado) {
   if (!data[id]) return false;
 
   asegurarPerfil(data, id);
+  if (estado === 'ACTIVA' && planVencido(data[id])) return false;
 
   if (estado === 'PAUSADA' && Array.isArray(colaReanudacion)) {
     colaReanudacion = colaReanudacion.filter(x => String(x) !== String(id));
@@ -1581,6 +1587,7 @@ function cambiarEstadoTodos(estado) {
 
   for (const id of Object.keys(data)) {
     asegurarPerfil(data, id);
+    if (estado === 'ACTIVA' && planVencido(data[id])) continue;
     data[id].estado = estado;
     data[id].ultima_hora = horaActual();
     data[id].ultima_accion =
@@ -2789,7 +2796,7 @@ const cq2RenderOriginal = (req, res) => {
         <div class="row">📞 ${p.telefono || 'N/A'}</div>
         <div class="row">🆔 Código: ${p.codigo || 'N/A'}</div>
         <div class="row">📍 ${p.ubicacion || 'N/A'}</div>
-        <div class="row estado">🟢 ${p.estado}</div>
+        <div class="row estado">${planVencido(p) ? "❌ VENCIDA" : "🟢 " + p.estado}</div>
         <div class="row">🕒 ${p.ultima_hora}</div>
         <div class="row">⏱ Próximo bump: ${p.proximo_post_ts ? tiempoRestante(p.proximo_post_ts) : (p.proximo_post || 'N/A')}</div>
         <div class="row">📅 ${tiempoRestantePlan(p.fin_plan)}</div>
@@ -3257,6 +3264,7 @@ app.post('/guardar-perfil', (req, res) => {
   data[id].foto_pagina = foto_pagina || data[id].foto_pagina || 'https://picsum.photos/420/280';
   data[id].proximo_post = proximo_post || '16m';
   data[id].fin_plan = convertirFinPlan(fin_plan || '7 días');
+  if (planVencido(data[id])) data[id].estado = 'PAUSADA';
   data[id].ultima_hora = horaActual();
   data[id].ultimaAccion = 'Perfil editado desde panel';
   data[id].ultima_accion = 'Perfil editado desde panel';
@@ -3366,8 +3374,9 @@ async function procesarColaReanudacion(versionActiva) {
 
   if (versionActiva !== colaVersion) return;
 
-  cambiarEstadoPerfil(id, 'ACTIVA');
-  await enviarTexto(`▶️ Perfil ${id} reanudado automáticamente en cola.`);
+  const reanudado = cambiarEstadoPerfil(id, 'ACTIVA');
+  if (reanudado) await enviarTexto(`▶️ Perfil ${id} reanudado automáticamente en cola.`);
+  else await enviarTexto(`❌ Perfil ${id}: reanudación denegada por vencimiento o error de guardado.`);
   await enviarEstadoPerfil(id);
 
   if (versionActiva !== colaVersion) return;
