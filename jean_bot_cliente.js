@@ -1433,6 +1433,8 @@ function configurarBotPrincipal(token) {
 }
 
 module.exports = {
+  autorizarGrupo: (hash,chatId)=>
+    !!buscarPerfil(hash,chatId),
   iniciar,
   enviar,
   teclado,

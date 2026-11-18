@@ -2206,23 +2206,272 @@ function cq2VistaProgramacionTelegram(id, accion, guardada = null) {
 
   return texto;
 }
+
+/* CQ2_CONTROL_UNICO_CHAT_V1 */
+const cq2ColasUnicas=new Map();
+
+function cq2ChatPerfil(perfil,chat) {
+  return String(perfil?.chat_id||'').trim()===String(chat).trim();
+}
+
+function cq2VencidoGrupo(perfil) {
+  if(!perfil)return true;
+  const fin=String(perfil.fin_plan||'').trim();
+  if(/^0\s*d[ií]as?\b/i.test(fin))return true;
+  if(!fin)return false;
+  const fecha=Date.parse(fin);
+  return Number.isFinite(fecha)&&fecha<=Date.now();
+}
+
+function cq2ClientesActivosGrupo() {
+  const store=require('./clientes_store');
+  return store.listar().filter(c=>
+    c && c.activo===true &&
+    Date.parse(c.vencimiento)>Date.now()
+  );
+}
+
+function cq2EntradasGrupo(chat) {
+  const resultado=[];
+  const admin=leerData();
+
+  for(const [id,perfil] of Object.entries(admin)) {
+    if(cq2ChatPerfil(perfil,chat))
+      resultado.push({tipo:'admin',id});
+  }
+
+  const store=require('./clientes_store');
+
+  for(const cliente of cq2ClientesActivosGrupo()) {
+    try {
+      const archivo=require('path').join(
+        store.carpetaCliente(cliente.id),'data.json'
+      );
+      const datos=JSON.parse(fs.readFileSync(archivo,'utf8'));
+      for(const [id,perfil] of Object.entries(datos)) {
+        if(cq2ChatPerfil(perfil,chat))
+          resultado.push({tipo:'cliente',cliente,id});
+      }
+    }catch(error) {
+      console.error('[CQ2 GRUPO LECTURA]',cliente.id,error.message);
+      throw error;
+    }
+  }
+
+  return resultado;
+}
+
+function cq2LeerEntradaGrupo(entrada) {
+  if(entrada.tipo==='admin') {
+    const datos=leerData();
+    return {datos,perfil:datos[entrada.id]};
+  }
+
+  const store=require('./clientes_store');
+  const archivo=require('path').join(
+    store.carpetaCliente(entrada.cliente.id),'data.json'
+  );
+  const datos=JSON.parse(fs.readFileSync(archivo,'utf8'));
+
+  return {datos,perfil:datos[entrada.id],archivo};
+}
+
+function cq2CambiarEntradaGrupo(entrada,chat,estado) {
+  if(entrada.tipo==='cliente') {
+    const cliente=cq2ClientesActivosGrupo().find(
+      c=>c.id===entrada.cliente.id
+    );
+    if(!cliente)return false;
+  }
+
+  const actual=cq2LeerEntradaGrupo(entrada);
+  const perfil=actual.perfil;
+
+  if(!perfil || !cq2ChatPerfil(perfil,chat))return false;
+  if(estado==='ACTIVA'&&cq2VencidoGrupo(perfil))return false;
+
+  perfil.estado=estado;
+  perfil.ultima_hora=new Date().toISOString();
+  perfil.ultima_accion=estado==='ACTIVA'
+    ? 'Reanudado por Chat ID'
+    : 'Pausado por Chat ID';
+
+  if(entrada.tipo==='admin') {
+    if(guardarData(actual.datos)===false)
+      throw Error('No se guardo perfil administrador');
+  }else{
+    const temporal=actual.archivo+'.tmp';
+    fs.writeFileSync(
+      temporal,JSON.stringify(actual.datos,null,2),'utf8'
+    );
+    fs.renameSync(temporal,actual.archivo);
+  }
+
+  return true;
+}
+
+async function cq2AvisarEntradaGrupo(entrada) {
+  try {
+    if(entrada.tipo==='admin') {
+      await enviarEstadoPerfil(entrada.id);
+    }else{
+      const actual=cq2LeerEntradaGrupo(entrada);
+      if(actual.perfil) {
+        await require('./jean_bot_cliente').enviar(
+          entrada.cliente,entrada.id,actual.perfil,
+          actual.perfil.ultima_accion
+        );
+      }
+    }
+  }catch(error) {
+    console.error('[CQ2 GRUPO AVISO]',error.message);
+  }
+}
+
+function cq2CancelarGrupo(chat) {
+  const clave=String(chat);
+  const cola=cq2ColasUnicas.get(clave);
+  if(cola){
+    cola.cancelada=true;
+    if(cola.timer)clearTimeout(cola.timer);
+    cq2ColasUnicas.delete(clave);
+  }
+}
+
+function cq2ControlarChat(chat,estado) {
+  const clave=String(chat).trim();
+  const entradas=cq2EntradasGrupo(clave);
+
+  if(estado==='PAUSADA') {
+    cq2CancelarGrupo(clave);
+    let cantidad=0;
+
+    for(const entrada of entradas) {
+      if(cq2CambiarEntradaGrupo(entrada,clave,'PAUSADA'))
+        cantidad++;
+    }
+
+    return {cantidad,accion:'PAUSADA'};
+  }
+
+  if(estado!=='ACTIVA')throw Error('Accion no permitida');
+
+  if(cq2ColasUnicas.has(clave))
+    return {cantidad:0,accion:'ACTIVA',existente:true};
+
+  const pendientes=entradas.filter(entrada=>{
+    const x=cq2LeerEntradaGrupo(entrada);
+    return x.perfil && !cq2VencidoGrupo(x.perfil);
+  });
+
+  if(!pendientes.length)
+    return {cantidad:0,accion:'ACTIVA'};
+
+  const cola={
+    entradas:pendientes,indice:0,
+    timer:null,cancelada:false
+  };
+
+  cq2ColasUnicas.set(clave,cola);
+
+  async function siguiente() {
+    if(cola.cancelada||cq2ColasUnicas.get(clave)!==cola)return;
+
+    try {
+      const entrada=cola.entradas[cola.indice++];
+      const cambiado=cq2CambiarEntradaGrupo(
+        entrada,clave,'ACTIVA'
+      );
+
+      if(cambiado)await cq2AvisarEntradaGrupo(entrada);
+    }catch(error){
+      console.error('[CQ2 COLA UNICA]',error.message);
+      cq2CancelarGrupo(clave);
+      return;
+    }
+
+    if(cola.cancelada||cq2ColasUnicas.get(clave)!==cola)return;
+
+    if(cola.indice<cola.entradas.length) {
+      cola.timer=setTimeout(()=>{void siguiente()},45000);
+    }else{
+      cq2ColasUnicas.delete(clave);
+    }
+  }
+
+  void siguiente();
+
+  return {cantidad:pendientes.length,accion:'ACTIVA'};
+}
+
+function cq2ChatsRegistrados() {
+  const chats=new Set();
+  for(const perfil of Object.values(leerData()))
+    chats.add(String(perfil.chat_id||'').trim());
+
+  const store=require('./clientes_store');
+  for(const cliente of cq2ClientesActivosGrupo()){
+    const archivo=require('path').join(
+      store.carpetaCliente(cliente.id),'data.json'
+    );
+    const datos=JSON.parse(fs.readFileSync(archivo,'utf8'));
+    for(const perfil of Object.values(datos))
+      chats.add(String(perfil.chat_id||'').trim());
+  }
+  return [...chats];
+}
+
+async function cq2ControlGlobal(estado) {
+  const chats=cq2ChatsRegistrados();
+  let cantidad=0;
+
+  for(const chat of chats) {
+    const resultado=cq2ControlarChat(chat,estado);
+    cantidad+=resultado.cantidad;
+
+    if(chat && /^-?\d+$/.test(chat)) {
+      await enviarTexto(
+        estado==='PAUSADA'
+          ? '⏸ Se pausaron '+resultado.cantidad+
+            ' perfiles de este Chat ID.'
+          : '▶️ Reanudando '+resultado.cantidad+
+            ' perfiles de este Chat ID, uno cada 45 segundos.',
+        chat
+      );
+    }
+  }
+
+  return cantidad;
+}
+/* FIN CQ2_CONTROL_UNICO_CHAT_V1 */
+
 async function procesarCallback(q) {
   const data = q.data || '';
   const callbackId = q.id;
   const chatId = q.message?.chat?.id || CHAT_ID;
 
   if (data === 'pausar_todas') {
-    cancelarColaReanudacion();
-    cambiarEstadoTodos('PAUSADA');
-    await responderCallback(callbackId, 'Todas pausadas');
-    await enviarTexto('⏸ Todas las páginas quedaron en PAUSADA. Cola cancelada.', chatId);
+    const resultado=cq2ControlarChat(chatId,'PAUSADA');
+    await responderCallback(callbackId,'Grupo pausado');
+    await enviarTexto(
+      '⏸ Se pausaron '+resultado.cantidad+
+      ' perfiles de este Chat ID. Cola cancelada.',chatId
+    );
     return;
   }
 
   if (data === 'reanudar_todas') {
-    reanudarTodasEnCola();
-    await responderCallback(callbackId, 'Reanudando en cola');
-    await enviarTexto('▶️ Reanudando todas en cola cada 45 segundos.', chatId);
+    const resultado=cq2ControlarChat(chatId,'ACTIVA');
+    await responderCallback(callbackId,
+      resultado.existente?'Cola ya activa':'Reanudando grupo'
+    );
+    await enviarTexto(
+      resultado.existente
+        ? '⏳ Ya existe una cola para este Chat ID.'
+        : '▶️ Reanudando '+resultado.cantidad+
+          ' perfiles de este Chat ID, uno cada 45 segundos.',
+      chatId
+    );
     return;
   }
 
@@ -2334,6 +2583,42 @@ async function revisarTelegram() {
 
       if (u.callback_query) {
         // CQ2_TELEGRAM_BOT_UNICO_V1
+        // CQ2: controles masivos de cliente usan el motor unico.
+        const partesGrupo=String(
+          u.callback_query.data||''
+        ).split('|');
+
+        if(partesGrupo.length===3 &&
+           ['P','R'].includes(partesGrupo[1]) &&
+           partesGrupo[0]==='jc') {
+          const q=u.callback_query;
+          const chat=q.message?.chat?.id;
+          const autorizado=require('./jean_bot_cliente')
+            .autorizarGrupo(partesGrupo[2],chat);
+
+          if(!autorizado){
+            await responderCallback(q.id,'Acceso denegado');
+            continue;
+          }
+
+          const resultado=cq2ControlarChat(
+            chat,partesGrupo[1]==='P'?'PAUSADA':'ACTIVA'
+          );
+
+          await responderCallback(q.id,'Accion de grupo recibida');
+          await enviarTexto(
+            resultado.existente
+              ? '⏳ Ya hay una cola activa para este Chat ID.'
+              : partesGrupo[1]==='P'
+                ? '⏸ Se pausaron '+resultado.cantidad+
+                  ' perfiles de este Chat ID.'
+                : '▶️ Reanudando '+resultado.cantidad+
+                  ' perfiles de este Chat ID, uno cada 45 segundos.',
+            chat
+          );
+          continue;
+        }
+
         if (String(u.callback_query.data || '').startsWith('jc|')) {
           await require('./jean_bot_cliente').procesar(u.callback_query);
         } else {
@@ -3372,11 +3657,10 @@ app.post('/accion-global', async (req, res) => {
 
   if (accion === 'pausar_todas') {
     cancelarColaReanudacion();
-    cambiarEstadoTodos('PAUSADA');
-    await enviarTexto('⏸ Todas las páginas quedaron en PAUSADA. Cola cancelada.');
+    await cq2ControlGlobal('PAUSADA');
   } else if (accion === 'reanudar_todas') {
-    reanudarTodasEnCola();
-    await enviarTexto('▶️ Reanudando todas en cola cada 45 segundos.');
+    cancelarColaReanudacion();
+    await cq2ControlGlobal('ACTIVA');
   }
 
   res.redirect('/');
