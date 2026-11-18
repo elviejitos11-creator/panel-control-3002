@@ -929,6 +929,14 @@ app.post(
       );
       fs.renameSync(temporal, archivo);
 
+      // CQ2_AVISO_ADMIN_CLIENTE_V1
+      void require('./jean_bot_cliente')
+        .enviar(c, id, datos[id], 'PERFIL CREADO')
+        .then(ok => {
+          if (!ok) console.error('[CQ2 AVISO CLIENTE] No entregado al crear', id);
+        })
+        .catch(e => console.error('[CQ2 AVISO CLIENTE]', e.message));
+
       return res.redirect(
         '/admin/panel/' + encodeURIComponent(c.id)
       );
@@ -1015,6 +1023,14 @@ app.post('/admin/cliente/:id/accion', (req,res) => {
       temporal,JSON.stringify(datos,null,2),'utf8'
     );
     fs.renameSync(temporal,archivo);
+
+    // CQ2_AVISO_ADMIN_CLIENTE_V1
+    void require('./jean_bot_cliente')
+      .enviar(cliente, id, datos[id], datos[id].ultima_accion)
+      .then(ok => {
+        if (!ok) console.error('[CQ2 AVISO CLIENTE] No entregado', id);
+      })
+      .catch(e => console.error('[CQ2 AVISO CLIENTE]', e.message));
 
     return res.json({ok:true,estado:datos[id].estado});
   } catch(e) {
