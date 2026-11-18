@@ -2317,13 +2317,20 @@ async function revisarTelegram() {
       state.offset = u.update_id;
 
       if (u.callback_query) {
-        await procesarCallback(u.callback_query);
+        // CQ2_TELEGRAM_BOT_UNICO_V1
+        if (String(u.callback_query.data || '').startsWith('jc|')) {
+          await require('./jean_bot_cliente').procesar(u.callback_query);
+        } else {
+          await procesarCallback(u.callback_query);
+        }
         Object.assign(state, leerState());
         state.offset = u.update_id;
       }
 
       if (u.message) {
         const msg = u.message;
+        // El cliente solo procesa sus propias programaciones pendientes.
+        await require('./jean_bot_cliente').cqMensajeHorario(msg);
         const chatId = msg.chat?.id || CHAT_ID;
 
         if (msg.text) {
@@ -3414,6 +3421,8 @@ async function cicloPrincipal() {
   try {
     await revisarTelegram();
     await ejecutarProgramaciones();
+  // CQ2_AGENDA_TELEGRAM_COMPARTIDA_V1
+  await require('./jean_bot_cliente').ejecutarProgramaciones();
   } catch (error) {
     console.log('Error en cicloPrincipal:', error?.message || error);
   } finally {
@@ -3441,5 +3450,10 @@ app.listen(PORT, async () => {
   }
 
   await apiTelegram('deleteWebhook', {});
+  // CQ2_TELEGRAM_BOT_UNICO_V1
+  // Reutilizar el bot principal. No iniciar un segundo receptor.
+  if (BOT_TOKEN) {
+    require('./jean_bot_cliente').configurarBotPrincipal(BOT_TOKEN);
+  }
   cicloPrincipal();
 });

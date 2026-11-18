@@ -1240,8 +1240,19 @@ async function iniciar(token) {
   );
 }
 
+// CQ2_TELEGRAM_BOT_UNICO_V1
+function configurarBotPrincipal(token) {
+  if (typeof token !== 'string' || !token.trim())
+    throw Error('Token principal no configurado');
+  tokenBot = token;
+}
+
 module.exports = {
   iniciar,
   enviar,
-  teclado
+  teclado,
+  procesar,
+  cqMensajeHorario,
+  ejecutarProgramaciones,
+  configurarBotPrincipal
 };
