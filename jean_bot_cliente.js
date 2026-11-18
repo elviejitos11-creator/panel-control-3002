@@ -686,6 +686,76 @@ function cq2FechaLegibleRD(ts) {
   });
 }
 
+
+/* CQ2_AGENDA_FORMATO_PRINCIPAL_V1 */
+function cq2VistaProgramacionCliente(cliente,id,accion,guardada=null) {
+  const datos=leerPerfiles(cliente);
+  const perfil=datos[String(id)] || {};
+  const ahora=Date.now();
+  let tareas=[];
+
+  try {
+    const agenda=cq2LeerAgendaCliente(cliente);
+    tareas=Array.isArray(agenda.schedules)
+      ? agenda.schedules.filter(t=>
+          t &&
+          String(t.id)===String(id) &&
+          Number(t.ejecutarEn)>ahora
+        )
+      : [];
+  } catch(e) {
+    console.error('[AGENDA CLIENTE VISTA]',e.message);
+  }
+
+  const horaRD=ts=>new Date(Number(ts))
+    .toLocaleString('es-DO',{
+      timeZone:'America/Santo_Domingo',
+      day:'2-digit',
+      month:'2-digit',
+      year:'numeric',
+      hour:'2-digit',
+      minute:'2-digit',
+      hour12:true
+    });
+
+  const siguiente=tipo=>{
+    const lista=tareas.filter(t=>t.accion===tipo)
+      .sort((a,b)=>Number(a.ejecutarEn)-Number(b.ejecutarEn));
+    return lista.length
+      ? horaRD(lista[0].ejecutarEn)
+      : 'No programado';
+  };
+
+  const nombreAccion=accion==='PAUSADA'
+    ? '⏸ PAUSAR' : '▶️ REANUDAR';
+
+  const titulo=guardada===null
+    ? '⏰ PROGRAMACIÓN'
+    : '✅ PROGRAMACIÓN GUARDADA';
+
+  let texto=titulo+
+    '\n\n👤 Perfil: '+id+
+    '\nAcción: '+nombreAccion+
+    '\nEstado actual: '+(perfil.estado||'N/A');
+
+  if(guardada!==null) {
+    texto+='\n📅 Se ejecutará: '+horaRD(guardada);
+  } else {
+    texto+='\n\n✍️ Escribe la fecha y hora:'+
+      '\nHOY 8:00 PM'+
+      '\nMAÑANA 2:00 AM'+
+      '\n06/11 5:00 PM'+
+      '\n\nEscribe CANCELAR para salir.';
+  }
+
+  texto+='\n\n⏰ PROGRAMACIONES ACTUALES'+
+    '\n⏸ Pausar: '+siguiente('PAUSADA')+
+    '\n▶️ Reanudar: '+siguiente('ACTIVA');
+
+  return texto;
+}
+/* FIN CQ2_AGENDA_FORMATO_PRINCIPAL_V1 */
+
 function cq2RutaAgendaCliente(cliente) {
   return path.join(
     store.carpetaCliente(cliente.id),
@@ -850,7 +920,7 @@ async function cqMensajeHorario(m) {
 
     await telegram('sendMessage', {
       chat_id: chat,
-      text: 'Programaci?n cancelada.'
+      text: 'Programación cancelada.'
     });
 
     return;
@@ -859,16 +929,13 @@ async function cqMensajeHorario(m) {
   const ts = cq2FechaRDTelegram(texto);
 
   if (!ts) {
-    await telegram('sendMessage', {
-      chat_id: chat,
-      text:
-        'Fecha inv?lida.\n' +
-        'Ejemplos:\n' +
-        'MA?ANA 5:00 AM\n' +
-        '30/10 7:30 PM\n\n' +
-        'Para salir escribe CANCELAR.'
+    await telegram('sendMessage',{
+      chat_id:chat,
+      text:'Fecha inválida.\n\n'+
+        cq2VistaProgramacionCliente(
+          cliente,pendiente.perfil_id,pendiente.estado
+        )
     });
-
     return;
   }
 
@@ -881,18 +948,13 @@ async function cqMensajeHorario(m) {
   delete estado.pendientes[clave];
   guardarEstado(estado);
 
-  await telegram('sendMessage', {
-    chat_id: chat,
-    text:
-      'PROGRAMACION GUARDADA\nPerfil: ' + pendiente.perfil_id + '\n' +
-      (pendiente.estado === 'PAUSADA'
-        ? 'PAUSAR'
-        : 'REANUDAR') +
-      '\n' +
-      cq2FechaLegibleRD(ts)
+  await telegram('sendMessage',{
+    chat_id:chat,
+    text:cq2VistaProgramacionCliente(
+      cliente,pendiente.perfil_id,pendiente.estado,ts
+    )
   });
 }
-
 async function procesar(q) {
   const partes = String(q.data || '').split('|');
 
@@ -968,31 +1030,26 @@ async function procesar(q) {
   }
 
   if (accion === 's' || accion === 'S') {
-    const agenda = leerEstado();
-    agenda.pendientes = agenda.pendientes || {};
-    const clave = cqPendienteClave(
-      q.message.chat.id, q.from.id
+    const agenda=leerEstado();
+    agenda.pendientes=agenda.pendientes||{};
+    const clave=cqPendienteClave(
+      q.message.chat.id,q.from.id
     );
-    agenda.pendientes[clave] = {
-      cliente_id: cliente.id,
-      perfil_id: id,
-      estado: accion === 's' ? 'PAUSADA' : 'ACTIVA',
-      creado: Date.now()
+    const estadoDeseado=accion==='s' ? 'PAUSADA' : 'ACTIVA';
+
+    agenda.pendientes[clave]={
+      cliente_id:cliente.id,
+      perfil_id:id,
+      estado:estadoDeseado,
+      creado:Date.now()
     };
     guardarEstado(agenda);
-    await responder(q, 'Escribe fecha y hora');
-    await telegram('sendMessage', {
-      chat_id: q.message.chat.id,
-      text: 'PROGRAMACION - Perfil ' + id +
-        '\nEscribe fecha y hora:' +
-        '\nMA?ANA 5:00 AM' +
-        '\n30/10 7:30 PM' +
-        '\nPara cancelar: CANCELAR',
-      reply_markup: {
-        force_reply: true,
-        selective: true,
-        input_field_placeholder: 'MA?ANA 7:00 AM'
-      }
+    await responder(q,'Indica fecha y hora');
+    await telegram('sendMessage',{
+      chat_id:q.message.chat.id,
+      text:cq2VistaProgramacionCliente(
+        cliente,id,estadoDeseado
+      )
     });
     return;
   }
